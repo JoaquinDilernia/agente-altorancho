@@ -4,7 +4,8 @@ import cors from 'cors';
 
 export function createApp({ webhookRouter, apiRouter, corsOrigin, staticDir, health } = {}) {
   const app = express();
-  if (corsOrigin) app.use(cors({ origin: corsOrigin }));
+  // lista separada por comas; solo se devuelve el header a los orígenes permitidos
+  if (corsOrigin) app.use(cors({ origin: corsOrigin.split(',').map((o) => o.trim()) }));
   // webhooks van ANTES de express.json(): la verificación HMAC necesita el raw body
   if (webhookRouter) app.use('/webhooks', webhookRouter);
   app.use(express.json());

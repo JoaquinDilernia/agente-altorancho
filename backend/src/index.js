@@ -59,6 +59,7 @@ async function onOrderEvent(event) {
 
 const distDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
 const app = createApp({
+  corsOrigin: process.env.FRONTEND_ORIGIN,
   webhookRouter: createWebhookRouter({ secret: process.env.TIENDANUBE_WEBHOOK_SECRET, onOrderEvent }),
   apiRouter: [
     createAuthMiddleware({ password: env('DASHBOARD_PASSWORD') }),

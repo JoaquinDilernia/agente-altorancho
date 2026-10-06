@@ -17,6 +17,13 @@ describe('app', () => {
     const res = await request(createApp({ health: async () => { throw new Error('db caída'); } })).get('/health');
     expect(res.status).toBe(503);
   });
+  it('permite CORS solo desde el dominio del frontend', async () => {
+    const app = createApp({ corsOrigin: 'https://agente.techdi.com.ar' });
+    const ok = await request(app).get('/health').set('Origin', 'https://agente.techdi.com.ar');
+    expect(ok.headers['access-control-allow-origin']).toBe('https://agente.techdi.com.ar');
+    const other = await request(app).get('/health').set('Origin', 'https://otro.com');
+    expect(other.headers['access-control-allow-origin']).toBeUndefined();
+  });
   it('sirve el frontend y hace fallback SPA, sin tapar /api', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dist-'));
     fs.writeFileSync(path.join(dir, 'index.html'), '<html>app</html>');
