@@ -99,3 +99,4 @@ table.simple th:first-child, table.simple td:first-child { text-align: left; }
   .cards { grid-template-columns: repeat(4, 1fr); }
   .card.wide { grid-column: span 2; }
 }
+.row-btn { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); text-align: left; }
