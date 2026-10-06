@@ -17,6 +17,15 @@ import { createUrlTagger } from './sync/urlTagger.js';
 import { createJobRunner } from './sync/jobs.js';
 import { createJobCatalog } from './jobsCatalog.js';
 import { artDate, addDays } from './engine/dates.js';
+import Anthropic from '@anthropic-ai/sdk';
+import { createAgentConfigRepo } from './repo/agentConfig.js';
+import { createAgentMetrics } from './repo/agentMetrics.js';
+import { createRecommendationsRepo, createAgentRunsRepo, createLearningsRepo } from './repo/recommendations.js';
+import { buildDataset } from './agent/dataset.js';
+import { createAgentRunner } from './agent/runner.js';
+import { createExecutor } from './agent/executor.js';
+import { createOutcomeMeter } from './agent/outcomes.js';
+import { createAgentRouter } from './routes/agent.js';
 import { createApp } from './app.js';
 import { createWebhookRouter } from './routes/webhooks.js';
 import { createApiRouter } from './routes/api.js';
@@ -47,6 +56,19 @@ const jobs = createJobRunner({ syncRuns });
 const jobCatalog = createJobCatalog({ orderSync, metaSync, ordersRepo, syncRuns });
 const runJob = (name) => jobs.run(jobCatalog[name].source, jobCatalog[name].fn);
 
+const configRepo = createAgentConfigRepo(db);
+const recsRepo = createRecommendationsRepo(db);
+const agentRuns = createAgentRunsRepo(db);
+const learningsRepo = createLearningsRepo(db);
+const agentMetrics = createAgentMetrics({ db, reports });
+const runner = createAgentRunner({
+  anthropic: new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') }),
+  configRepo, runs: agentRuns, recs: recsRepo, learnings: learningsRepo,
+  loadDataset: () => buildDataset({ db, metrics: agentMetrics, today: artDate() }),
+});
+const executor = createExecutor({ meta, recs: recsRepo, configRepo });
+const meter = createOutcomeMeter({ db, recs: recsRepo, metrics: agentMetrics });
+
 async function onOrderEvent(event) {
   try {
     await orderSync.syncOrder(event.id);
@@ -64,6 +86,7 @@ const app = createApp({
   apiRouter: [
     createAuthMiddleware({ password: env('DASHBOARD_PASSWORD') }),
     createApiRouter({ reports, syncRuns, metaRepo, urlTagger, jobs, jobCatalog }),
+    createAgentRouter({ runner, executor, recs: recsRepo, runs: agentRuns, learnings: learningsRepo, configRepo }),
   ],
   staticDir: fs.existsSync(path.join(distDir, 'index.html')) ? distDir : undefined,
   health: async () => {
@@ -85,6 +108,16 @@ cron.schedule('15 * * * *', async () => {
 }, TZ);
 // Correcciones tardías de Meta — últimos 7 días, 05:00 ART
 cron.schedule('0 5 * * *', () => runJob('meta-spend'), TZ);
+
+// Análisis diario del agente: datos frescos de Meta y corrida (08:00 ART)
+cron.schedule('0 8 * * *', async () => {
+  await runJob('meta-catalog');
+  await runJob('meta-spend');
+  await runner.run({ trigger: 'cron' }).catch(() => {});
+}, TZ);
+// Resultados de lo ejecutado (09:00 ART) y vencimiento de pendientes (cada hora)
+cron.schedule('0 9 * * *', () => meter.measure().catch((e) => console.error('[agente] medición falló:', e)), TZ);
+cron.schedule('30 * * * *', () => executor.expire().catch((e) => console.error('[agente] vencimiento falló:', e)), TZ);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`altorancho-backend escuchando en :${port}`));

@@ -5,7 +5,7 @@ Spec: `docs/superpowers/specs/2026-10-06-altorancho-ventas-atribucion-design.md`
 
 ## Variables de entorno (Railway)
 Ver `backend/.env.example`: DATABASE_URL (referencia al servicio Postgres), TIENDANUBE_STORE_ID,
-TIENDANUBE_TOKEN, TIENDANUBE_WEBHOOK_SECRET, META_ACCESS_TOKEN, META_ACCOUNT_ID, DASHBOARD_PASSWORD.
+TIENDANUBE_TOKEN, TIENDANUBE_WEBHOOK_SECRET, META_ACCESS_TOKEN, META_ACCOUNT_ID, DASHBOARD_PASSWORD, ANTHROPIC_API_KEY.
 
 ## Primer arranque
 1. Deploy (Railway usa `railway.json` de la raíz: build front + back, start back).
@@ -19,6 +19,11 @@ TIENDANUBE_TOKEN, TIENDANUBE_WEBHOOK_SECRET, META_ACCESS_TOKEN, META_ACCOUNT_ID,
 ## Jobs disponibles (`POST /api/sync/:job`)
 tn-backfill, tn-incremental, meta-catalog, meta-spend, meta-backfill, reattribute
 (recalcula la atribución de todo el histórico después de cambiar reglas).
+
+## Agente de recomendaciones
+Corre todos los días a las 08:00 (ART) y con "Analizar ahora" (2 por día). Solo recomienda: ejecuta en Meta
+al aprobar y solo si "Ejecución habilitada" está activo en Agente → Configuración (arranca apagado).
+Spec: `docs/superpowers/specs/2026-10-06-altorancho-agente-recomendaciones-design.md`.
 
 ## Local
 cd backend && npm install && npx vitest run      # tests (Postgres en memoria con PGlite)
