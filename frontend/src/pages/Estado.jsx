@@ -10,6 +10,7 @@ const SOURCES = [
   ['meta_backfill', 'Meta — histórico'],
   ['meta_url_tags', 'Parámetros de URL'],
   ['reattribute', 'Re-atribución'],
+  ['google_ingest', 'Google — gasto'],
 ];
 const LABEL = Object.fromEntries(SOURCES);
 

@@ -77,4 +77,11 @@ describe('Anuncios', () => {
     setup({ missing: [] });
     expect(await screen.findByText(/todos los anuncios activos tienen los parámetros/i)).toBeInTheDocument();
   });
+  it('selector Google: pide platform=google, muestra "Google dice" y no tiene drill-down ni parámetros', async () => {
+    const api = setup();
+    await userEvent.click(await screen.findByRole('button', { name: /^google$/i }));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/ads?from=2026-09-29&to=2026-10-05&level=campaign&sort=spend&platform=google'));
+    expect(await screen.findAllByText(/google dice/i)).not.toHaveLength(0);
+    expect(screen.queryByText(/parámetros de url/i)).not.toBeInTheDocument();
+  });
 });

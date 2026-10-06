@@ -41,7 +41,7 @@ export default function OrderDetail({ api }) {
               <dt>Campaña</dt><dd>{o.campaign_name || '—'}</dd>
             </dl>
           )}
-          {o.channel === 'google' && <p style={{ marginTop: 8 }}>Campaña de Google {o.campaign_id || 'sin identificar'}</p>}
+          {o.channel === 'google' && <p style={{ marginTop: 8 }}>Campaña de Google: {o.campaign_name || o.campaign_id || 'sin identificar'}</p>}
           {o.channel === 'email' && o.campaign_name && <p style={{ marginTop: 8 }}>{o.campaign_name}</p>}
           {paidChannel && <p className="note">{CONFIDENCE_TEXT[o.confidence]}</p>}
         </div>

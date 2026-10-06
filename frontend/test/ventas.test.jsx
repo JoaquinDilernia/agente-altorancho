@@ -10,6 +10,7 @@ const SUMMARY = {
   channels: [{ channel: 'meta', orders: 3, revenue: 6000 }, { channel: 'organic', orders: 1, revenue: 700 }],
   meta: { spend: 1000, orders: 3, revenue: 6000, roas: 6, costPerSale: 333.33, reported: { purchases: 5, value: 9000, roas: 9 } },
   coverage: { ad: 2, campaign: 0, none: 1 },
+  google: { spend: 2000, orders: 2, revenue: 9000, roas: 4.5, costPerSale: 1000, reported: { conversions: 6, value: 30000, roas: 15 }, coverage: { campaign: 2, none: 0 } },
 };
 const order = (id, extra = {}) => ({
   id: String(id), number: 59000 + id, created_at: new Date().toISOString(), total: 1000, status: 'open', payment_status: 'paid',
@@ -82,5 +83,11 @@ describe('Ventas', () => {
     const api = setup();
     await userEvent.type(await screen.findByPlaceholderText(/buscar/i), '59001');
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/orders?from=2026-09-29&to=2026-10-05&q=59001'));
+  });
+  it('tarjetas de Google con lo real vs lo que dice Google', async () => {
+    setup();
+    expect(await screen.findByText('Gasto Google')).toBeInTheDocument();
+    expect(screen.getByText('4,5x')).toBeInTheDocument();
+    expect(screen.getByText(/google dice 15,0x/i)).toBeInTheDocument();
   });
 });

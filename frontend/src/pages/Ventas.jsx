@@ -43,6 +43,20 @@ function Summary({ s, channel, onChannel }) {
           <div className="card-value">{fmtNumber(meta.orders)}</div>
           <div className="card-sub">Meta dice {fmtNumber(meta.reported.purchases)} · facturaron {fmtMoney(meta.revenue)}</div>
         </div>
+        {s.google && (
+          <>
+            <div className="card">
+              <div className="card-label">Gasto Google</div>
+              <div className="card-value">{fmtMoney(s.google.spend)}</div>
+              <div className="card-sub">{fmtMoney(s.google.costPerSale)} por venta</div>
+            </div>
+            <div className="card">
+              <div className="card-label">ROAS real Google</div>
+              <div className="card-value">{fmtRoas(s.google.roas)}</div>
+              <div className="card-sub">Google dice {fmtRoas(s.google.reported.roas)}</div>
+            </div>
+          </>
+        )}
       </div>
 
       <h2 className="section-title">Origen de las ventas</h2>

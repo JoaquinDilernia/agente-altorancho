@@ -105,6 +105,7 @@ export default function Anuncios({ api, period, setPeriod }) {
   const navigate = useNavigate();
   const [stack, setStack] = useState([{ level: 'campaign', parentId: null, name: 'Campañas' }]);
   const [sort, setSort] = useState('spend');
+  const [platform, setPlatform] = useState('meta');
   const [refs, setRefs] = useState(() => new Set());
   useEffect(() => {
     api.get('/recommendations/refs')
@@ -112,10 +113,14 @@ export default function Anuncios({ api, period, setPeriod }) {
       .catch(() => {});
   }, [api]);
   const cur = stack[stack.length - 1];
-  const q = `${periodQuery(period)}&level=${cur.level}&sort=${sort}${cur.parentId ? `&parent=${cur.parentId}` : ''}`;
+  const q = platform === 'google'
+    ? `${periodQuery(period)}&level=campaign&sort=${sort}&platform=google`
+    : `${periodQuery(period)}&level=${cur.level}&sort=${sort}${cur.parentId ? `&parent=${cur.parentId}` : ''}`;
+  const reportedLabel = platform === 'google' ? 'Google dice' : 'Meta dice';
   const { data, error } = usePolling(() => api.get(`/ads?${q}`), [api, q], 120_000);
 
   const open = (r) => {
+    if (platform === 'google') return;
     if (cur.level === 'ad') navigate(`/anuncios/${r.id}`);
     else setStack([...stack, { level: NEXT[cur.level], parentId: r.id, name: r.name || r.id }]);
   };
@@ -123,11 +128,17 @@ export default function Anuncios({ api, period, setPeriod }) {
   return (
     <>
       <PeriodPicker period={period} onChange={setPeriod} />
-      <div className="crumbs">
+      <div className="chips" style={{ marginBottom: 10 }}>
+        {[['meta', 'Meta'], ['google', 'Google']].map(([id, label]) => (
+          <button key={id} type="button" aria-pressed={platform === id} className={platform === id ? 'chip active' : 'chip'}
+            onClick={() => { setPlatform(id); setStack([{ level: 'campaign', parentId: null, name: 'Campañas' }]); }}>{label}</button>
+        ))}
+      </div>
+      {platform === 'meta' && (<div className="crumbs">
         {stack.map((s, i) => (i < stack.length - 1
           ? <span key={s.name + i}><button type="button" onClick={() => setStack(stack.slice(0, i + 1))}>{s.name}</button> ›</span>
           : <strong key={s.name + i}>{s.name}</strong>))}
-      </div>
+      </div>)}
       <div className="chips" role="tablist" aria-label="Ordenar por" style={{ marginBottom: 10 }}>
         {SORTS.map((s) => (
           <button key={s.id} type="button" role="tab" aria-selected={sort === s.id} className={sort === s.id ? 'chip active' : 'chip'} onClick={() => setSort(s.id)}>
@@ -146,7 +157,7 @@ export default function Anuncios({ api, period, setPeriod }) {
                   <div className="row-main">
                     <div className="row-title">{r.name || `ID ${r.id}`}</div>
                     <div className="row-sub">
-                      <span>{fmtNumber(r.sales)} ventas · Meta dice {fmtNumber(r.metaPurchases)}</span>
+                      <span>{fmtNumber(r.sales)} ventas · {reportedLabel} {fmtNumber(r.metaPurchases)}</span>
                       {r.noSales && <span className="badge warn">Gastó sin ventas</span>}
                       {refs.has(r.id) && <span className="badge">Recomendación pendiente</span>}
                     </div>
@@ -162,12 +173,12 @@ export default function Anuncios({ api, period, setPeriod }) {
           {data.rows.length === 0 && <p className="muted">Sin gasto ni ventas en este período.</p>}
           {data.unidentified?.orders > 0 && (
             <p className="note">
-              Además hubo {data.unidentified.orders} ventas de Meta ({fmtMoney(data.unidentified.revenue)}) que no se pudieron asignar a una campaña.
+              Además hubo {data.unidentified.orders} ventas de {platform === 'google' ? 'Google' : 'Meta'} ({fmtMoney(data.unidentified.revenue)}) que no se pudieron asignar a una campaña.
             </p>
           )}
         </>
       )}
-      <UrlParams api={api} />
+      {platform === 'meta' && <UrlParams api={api} />}
     </>
   );
 }
