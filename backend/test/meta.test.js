@@ -94,4 +94,14 @@ describe('cliente meta', () => {
     expect(new URL(url).pathname).toBe('/v23.0/AD1');
     expect(JSON.parse(opts.body)).toEqual({ creative: { creative_id: 'CR2' } });
   });
+  it('escrituras: estado y presupuesto diario en centavos', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok({ success: true }));
+    const meta = make(fetchFn);
+    await meta.setStatus('AD1', 'PAUSED');
+    await meta.setDailyBudget('C1', 55000.4);
+    await meta.getObject('C1', 'daily_budget');
+    expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({ status: 'PAUSED' });
+    expect(JSON.parse(fetchFn.mock.calls[1][1].body)).toEqual({ daily_budget: 5500040 });
+    expect(new URL(fetchFn.mock.calls[2][0]).searchParams.get('fields')).toBe('daily_budget');
+  });
 });

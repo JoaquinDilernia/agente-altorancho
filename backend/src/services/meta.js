@@ -91,6 +91,10 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
       return json.creative.id;
     },
     getCreative: (creativeId) => req(creativeId, { params: { fields: CREATIVE_READ_FIELDS.join(',') } }),
+    getObject: (id, fields) => req(id, { params: { fields } }),
+    setStatus: (id, status) => req(id, { method: 'POST', body: { status } }),
+    // daily_budget en Meta va en centavos (ARS, offset 100)
+    setDailyBudget: (id, pesos) => req(id, { method: 'POST', body: { daily_budget: Math.round(pesos * 100) } }),
     createCreative: (spec) => req(`${accountId}/adcreatives`, { method: 'POST', body: spec }),
     updateAdCreative: (adId, creativeId) => req(adId, { method: 'POST', body: { creative: { creative_id: creativeId } } }),
   };
