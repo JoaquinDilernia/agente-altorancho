@@ -104,4 +104,24 @@ describe('agentRunner', () => {
     await expect(runner.run({ trigger: 'cron' })).rejects.toThrow(/rechazó/);
     expect(await deps.runs.last()).toMatchObject({ status: 'error', input_tokens: 500 });
   });
+  it("dos corridas a la vez: la segunda se saltea (sin doble costo)", async () => {
+    const { runner, create } = runnerWith([toolUse("recomendar_pausa", pausaA), endTurn]);
+    const [a, b] = await Promise.all([runner.run({ trigger: "cron" }), runner.run({ trigger: "cron" })]);
+    expect([a, b].filter((r) => r.skipped === "running")).toHaveLength(1);
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+  it("tope mensual cuenta la estimación de la corrida (promedio de las anteriores)", async () => {
+    const id = await deps.runs.start({ trigger: "cron", model: "claude-opus-5-5", startedAt: NOW.toISOString() });
+    await deps.runs.finish(id, { status: "ok", cost_usd: 19.8 });
+    const { runner, create } = runnerWith([]);
+    expect(await runner.check({ trigger: "cron" })).toBe("budget");
+    expect(await runner.run({ trigger: "cron" })).toEqual({ skipped: "budget" });
+    expect(create).not.toHaveBeenCalled();
+  });
+  it("check informa el motivo sin correr", async () => {
+    const { runner } = runnerWith([]);
+    expect(await runner.check({ trigger: "manual" })).toBeNull();
+    await deps.configRepo.update({ agentEnabled: false });
+    expect(await runner.check({ trigger: "manual" })).toBe("disabled");
+  });
 });

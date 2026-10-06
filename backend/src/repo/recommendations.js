@@ -143,6 +143,14 @@ export function createAgentRunsRepo(db) {
       const { rows } = await db.query('SELECT COALESCE(sum(cost_usd), 0)::float8 AS c FROM agent_runs WHERE started_at >= $1::timestamptz', [iso]);
       return rows[0].c;
     },
+    async avgCost(n) {
+      const { rows } = await db.query(
+        `SELECT avg(cost_usd)::float8 AS c FROM (
+           SELECT cost_usd FROM agent_runs WHERE status = 'ok' AND cost_usd > 0 ORDER BY id DESC LIMIT $1) t`,
+        [n],
+      );
+      return rows[0].c;
+    },
     async last() {
       const { rows } = await db.query(
         `SELECT id::int AS id, trigger, started_at, finished_at, status, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd,

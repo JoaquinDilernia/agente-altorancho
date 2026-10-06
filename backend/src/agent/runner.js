@@ -29,15 +29,32 @@ export function createAgentRunner({ anthropic, configRepo, runs, recs, learnings
     return Math.max(0, config.manualRunsPerDay - await runs.manualCountSince(since));
   }
 
+  const DEFAULT_ESTIMATE_USD = 0.3;
+
+  // Motivo por el que no se puede correr ahora (o null). No mira el flag running.
+  async function blockReason(config, trigger) {
+    if (!config.agentEnabled) return 'disabled';
+    if (trigger === 'manual' && (await quotaLeftFor(config)) <= 0) return 'quota';
+    const monthStart = `${artDate(now()).slice(0, 7)}-01T00:00:00-03:00`;
+    const estimate = (await runs.avgCost(5)) ?? DEFAULT_ESTIMATE_USD;
+    if ((await runs.costSince(monthStart)) + estimate > config.monthlyBudgetUsd) return 'budget';
+    return null;
+  }
+
   async function run({ trigger }) {
     if (running) return { skipped: 'running' };
-    const config = await configRepo.get();
-    if (!config.agentEnabled) return { skipped: 'disabled' };
-    if (trigger === 'manual' && (await quotaLeftFor(config)) <= 0) return { skipped: 'quota' };
-    const monthStart = `${artDate(now()).slice(0, 7)}-01T00:00:00-03:00`;
-    if ((await runs.costSince(monthStart)) >= config.monthlyBudgetUsd) return { skipped: 'budget' };
+    running = true; // se toma antes de cualquier await: evita dos corridas simultáneas
+    try {
+      const config = await configRepo.get();
+      const reason = await blockReason(config, trigger);
+      if (reason) return { skipped: reason };
+      return await execute(config, trigger);
+    } finally {
+      running = false;
+    }
+  }
 
-    running = true;
+  async function execute(config, trigger) {
     const runId = await runs.start({ trigger, model: config.model, startedAt: now().toISOString() });
     const usage = { input: 0, output: 0 };
     try {
@@ -99,13 +116,15 @@ export function createAgentRunner({ anthropic, configRepo, runs, recs, learnings
         input_tokens: usage.input, output_tokens: usage.output, cost_usd: cost(usage, config),
       });
       throw err;
-    } finally {
-      running = false;
     }
   }
 
   return {
     run,
+    async check({ trigger }) {
+      if (running) return 'running';
+      return blockReason(await configRepo.get(), trigger);
+    },
     quotaLeft: async () => quotaLeftFor(await configRepo.get()),
     isRunning: () => running,
   };

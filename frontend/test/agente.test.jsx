@@ -95,7 +95,33 @@ describe('Agente — Pendientes', () => {
   });
 });
 
+describe('Agente — resultado de aprobar', () => {
+  for (const [res, text] of [
+    [{ status: 'executed' }, /se aplicó en meta/i],
+    [{ status: 'approved' }, /no se tocó meta/i],
+    [{ status: 'stale' }, /no se ejecutó: cambió en meta/i],
+    [{ status: 'failed', error: 'Meta 190: token vencido' }, /no se pudo ejecutar: meta 190: token vencido/i],
+  ]) {
+    it(`muestra el resultado ${res.status}`, async () => {
+      const api = setup();
+      api.post.mockResolvedValueOnce(res);
+      const card = (await screen.findByText(/pausar anuncio sillas/i)).closest('article');
+      await userEvent.click(within(card).getByRole('button', { name: /aprobar/i }));
+      expect(await screen.findByText(text)).toBeInTheDocument();
+    });
+  }
+});
+
 describe('Agente — otras pestañas', () => {
+  it('historial muestra el error de ejecución y si quedó a mitad', async () => {
+    const api = setup();
+    const failed = { ...executed, id: 5, status: 'failed', undo_until: null, verdict: null, outcome: null,
+      execution_result: { error: 'Meta 100: error', partial: { applied_from: 32000, revert_error: 'x' } } };
+    api.get.mockImplementation(async (p) => (p.startsWith('/recommendations?group=history') ? [failed] : p === '/agent/overview' ? overview() : []));
+    await userEvent.click(await screen.findByRole('tab', { name: /historial/i }));
+    expect(await screen.findByText(/meta 100: error/i)).toBeInTheDocument();
+    expect(screen.getByText(/quedó a mitad/i)).toBeInTheDocument();
+  });
   it('historial muestra resultado y permite deshacer', async () => {
     const api = setup();
     await userEvent.click(await screen.findByRole('tab', { name: /historial/i }));

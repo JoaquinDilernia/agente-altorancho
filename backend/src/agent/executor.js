@@ -51,6 +51,8 @@ export function createExecutor({ meta, recs, configRepo, now = () => new Date(),
         await meta.setDailyBudget(rec.object_id, revertTo.from);
       } catch (revertErr) {
         log.error(`[executor] no se pudo revertir la reasignación #${rec.id}:`, revertErr);
+        // la primera escritura quedó aplicada: se informa para revisar a mano en Ads Manager
+        e.partial = { applied_from: values.from, revert_error: revertErr.message };
       }
       throw e;
     }
@@ -64,8 +66,9 @@ export function createExecutor({ meta, recs, configRepo, now = () => new Date(),
   }
 
   const fail = async (id, e) => {
-    await recs.transition(id, ['approved'], 'failed', { execution_result: { error: e.message } });
-    return { status: 'failed', error: e.message };
+    const partial = e.partial ? { partial: e.partial } : {};
+    await recs.transition(id, ['approved'], 'failed', { execution_result: { error: e.message, ...partial } });
+    return { status: 'failed', error: e.message, ...partial };
   };
 
   return {
@@ -121,6 +124,9 @@ export function createExecutor({ meta, recs, configRepo, now = () => new Date(),
         throw err(409, 'esta acción ya no se puede deshacer');
       }
       const applied = rec.execution_result?.applied || rec.proposed_value;
+      // no pisar cambios manuales hechos después de ejecutar
+      const actual = await readState(rec);
+      if (!sameState(rec.type, applied, actual)) throw err(409, 'no se puede deshacer: cambió en Meta desde la ejecución');
       await apply(rec, rec.previous_value, applied);
       if (!(await recs.transition(id, ['executed'], 'undone', { undone_at: now().toISOString() }))) throw err(409, 'ya fue deshecha');
       return { status: 'undone' };

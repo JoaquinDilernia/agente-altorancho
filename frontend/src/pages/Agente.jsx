@@ -22,16 +22,37 @@ function verdictText(rec) {
   return `${VERDICT[rec.verdict]}${pct}`;
 }
 
+function approveNotice(res) {
+  switch (res?.status) {
+    case 'executed': return { ok: true, text: 'Listo: se aplicó en Meta. Podés deshacerlo desde Historial durante 24 h.' };
+    case 'approved': return { ok: true, text: 'Aprobada. No se tocó Meta porque la ejecución está apagada.' };
+    case 'stale': return { ok: false, text: 'No se ejecutó: cambió en Meta desde la recomendación.' };
+    case 'failed': return { ok: false, text: `No se pudo ejecutar: ${res.error || 'error desconocido'}` };
+    default: return null;
+  }
+}
+
+function executionDetail(r) {
+  const e = r.execution_result;
+  if (!e) return null;
+  if (e.partial) return `Quedó a mitad: el origen ya bajó a ${e.partial.applied_from}. Revisalo en Ads Manager.`;
+  if (e.reason) return e.reason;
+  return null;
+}
+
 function Pendientes({ api, overview, reloadOverview }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
   const { data: recs, reload } = usePolling(() => api.get('/recommendations?group=pending'), [api], 60_000);
 
-  const act = useCallback(async (id, fn) => {
+  const act = useCallback(async (id, fn, describe) => {
     setBusy(id);
     setError(null);
+    setNotice(null);
     try {
-      await fn();
+      const res = await fn();
+      if (describe) setNotice(describe(res));
       reload();
       reloadOverview();
     } catch (e) {
@@ -62,10 +83,11 @@ function Pendientes({ api, overview, reloadOverview }) {
         </button>
       </div>
       {error && <p className="error">{error}</p>}
+      {notice && <p role="status" className={notice.ok ? 'banner' : 'banner error'}>{notice.text}</p>}
       {recs && actions.length === 0 && <p className="muted">No hay recomendaciones pendientes.</p>}
       {actions.map((r) => (
         <RecommendationCard key={r.id} rec={r} busy={busy === r.id}
-          onApprove={(amount) => act(r.id, () => api.post(`/recommendations/${r.id}/approve`, amount === undefined ? {} : { amount }))}
+          onApprove={(amount) => act(r.id, () => api.post(`/recommendations/${r.id}/approve`, amount === undefined ? {} : { amount }), approveNotice)}
           onReject={(reason) => act(r.id, () => api.post(`/recommendations/${r.id}/reject`, { reason }))} />
       ))}
       {ideas.length > 0 && (
@@ -124,6 +146,8 @@ function Historial({ api }) {
                   {r.reject_reason && <span>· {r.reject_reason}</span>}
                 </div>
                 {verdictText(r) && <div className="note">Resultado: {verdictText(r)}</div>}
+                {r.execution_result?.error && <div className="error">Error: {r.execution_result.error}</div>}
+                {executionDetail(r) && <div className="note">{executionDetail(r)}</div>}
               </div>
               {canUndo && (
                 <div className="row-side"><button type="button" className="chip" onClick={() => undo(r.id)}>Deshacer</button></div>

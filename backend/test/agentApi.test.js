@@ -8,7 +8,7 @@ const domainError = (status, msg) => Object.assign(new Error(msg), { status });
 
 function setup(over = {}) {
   const deps = {
-    runner: { run: vi.fn().mockResolvedValue({}), quotaLeft: vi.fn().mockResolvedValue(2), isRunning: vi.fn().mockReturnValue(false) },
+    runner: { run: vi.fn().mockResolvedValue({}), quotaLeft: vi.fn().mockResolvedValue(2), isRunning: vi.fn().mockReturnValue(false), check: vi.fn().mockResolvedValue(null) },
     executor: {
       approve: vi.fn().mockResolvedValue({ status: 'executed' }), reject: vi.fn().mockResolvedValue(), undo: vi.fn().mockResolvedValue({ status: 'undone' }),
       markSeen: vi.fn().mockResolvedValue(),
@@ -35,14 +35,17 @@ describe('API del agente', () => {
     expect(res.body).toMatchObject({ pendingCount: 3, manualRemaining: 2, monthCostUsd: 1.5, monthlyBudgetUsd: 20, executionEnabled: false, running: false });
     expect(deps.runs.costSince).toHaveBeenCalledWith('2026-10-01T00:00:00-03:00');
   });
-  it('run: 202 en segundo plano; 429 sin cupo; 409 si ya corre', async () => {
+  it('run: 202 en segundo plano; si no puede correr informa el motivo', async () => {
     const { call, deps } = setup();
     expect((await call('post', '/api/agent/run')).status).toBe(202);
     expect(deps.runner.run).toHaveBeenCalledWith({ trigger: 'manual' });
-    deps.runner.quotaLeft.mockResolvedValue(0);
-    expect((await call('post', '/api/agent/run')).status).toBe(429);
-    deps.runner.isRunning.mockReturnValue(true);
-    expect((await call('post', '/api/agent/run')).status).toBe(409);
+    for (const [reason, status, msg] of [['quota', 429, /análisis manuales/], ['budget', 429, /tope mensual/], ['running', 409, /corriendo/], ['disabled', 409, /apagado/]]) {
+      deps.runner.check.mockResolvedValueOnce(reason);
+      const r = await call('post', '/api/agent/run');
+      expect(r.status).toBe(status);
+      expect(r.body.error).toMatch(msg);
+    }
+    expect(deps.runner.run).toHaveBeenCalledTimes(1);
   });
   it('lista por grupo y tipo; valida parámetros', async () => {
     const { call, deps } = setup();

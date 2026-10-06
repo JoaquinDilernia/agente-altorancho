@@ -33,9 +33,19 @@ export function createAgentRouter({ runner, executor, recs, runs, learnings, con
     });
   }));
 
+  const BLOCKED = {
+    running: [409, 'Ya hay un análisis corriendo'],
+    disabled: [409, 'El agente está apagado (se activa en Configuración)'],
+    quota: [429, 'No quedan análisis manuales por hoy'],
+    budget: [429, 'Se alcanzó el tope mensual de la API (se cambia en Configuración)'],
+  };
+
   router.post('/agent/run', wrap(async (_req, res) => {
-    if (runner.isRunning()) return res.status(409).json({ error: 'Ya hay un análisis corriendo' });
-    if ((await runner.quotaLeft()) <= 0) return res.status(429).json({ error: 'No quedan análisis manuales por hoy' });
+    const reason = await runner.check({ trigger: 'manual' });
+    if (reason) {
+      const [status, error] = BLOCKED[reason];
+      return res.status(status).json({ error });
+    }
     runner.run({ trigger: 'manual' }).catch(() => {}); // el error queda registrado en agent_runs
     res.status(202).json({ started: true });
   }));

@@ -114,4 +114,19 @@ describe('executor: rechazar, ideas, deshacer, vencer', () => {
     await db.query("UPDATE recommendations SET created_at = '2026-10-03T00:00:00Z' WHERE id = $1", [id]);
     expect(await ex.expire()).toBe(1);
   });
+  it("deshacer no pisa un cambio manual posterior en Meta (409)", async () => {
+    const id = await recs.create(pauseRec);
+    await ex.approve(id);
+    await meta.setStatus("A", "ACTIVE"); // alguien lo reactivó a mano
+    meta.setStatus.mockClear();
+    await expect(ex.undo(id)).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/cambió en Meta/) });
+    expect(meta.setStatus).not.toHaveBeenCalled();
+  });
+  it("reasignación que falla y no se puede revertir deja registro de la escritura parcial", async () => {
+    meta.setDailyBudget.mockImplementationOnce(async () => {}).mockRejectedValueOnce(new Error("Meta 100: error")).mockRejectedValueOnce(new Error("Meta 2: caído"));
+    const id = await recs.create(shiftRec);
+    const r = await ex.approve(id);
+    expect(r).toMatchObject({ status: "failed", partial: { applied_from: 32000, revert_error: "Meta 2: caído" } });
+    expect((await recs.get(id)).execution_result).toMatchObject({ error: "Meta 100: error", partial: { applied_from: 32000, revert_error: "Meta 2: caído" } });
+  });
 });
