@@ -1,8 +1,8 @@
 import { artDate, addDays } from '../engine/dates.js';
 
-const PAID = "o.payment_status = 'paid' AND o.cancelled_at IS NULL";
+export const PAID = "o.payment_status = 'paid' AND o.cancelled_at IS NULL";
 // Rango de días ART inclusivo sobre orders.created_at ($a = desde, $b = hasta, 'YYYY-MM-DD')
-const RANGE = (a, b) => `o.created_at >= ($${a}::text || 'T00:00:00-03:00')::timestamptz
+export const RANGE = (a, b) => `o.created_at >= ($${a}::text || 'T00:00:00-03:00')::timestamptz
   AND o.created_at < (($${b}::date + 1)::text || 'T00:00:00-03:00')::timestamptz`;
 const KEY = { campaign: 'campaign_id', adset: 'adset_id', ad: 'ad_id' };
 const PARENT = { adset: 'campaign_id', ad: 'adset_id' };
