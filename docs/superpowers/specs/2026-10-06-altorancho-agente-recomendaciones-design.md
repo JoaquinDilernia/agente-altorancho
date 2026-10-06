@@ -70,7 +70,7 @@ estado (`updated_time`) del objeto pausado.
 
 ## 4. El agente
 
-- **Modelo:** Claude Sonnet 5.5 (`claude-sonnet-5-5`), configurable. Tool use.
+- **Modelo:** Claude Opus 5.5 (`claude-opus-5-5`, USD 4/20 por millón de tokens in/out; ~USD 0,15 por corrida), effort `medium`, configurable (ej. Sonnet 5.5). Tool use con `strict: true` y `tool_choice` auto (Opus 5.5 no acepta forzar tools). Respaldo ante rechazos: `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`).
 - **Contexto (acotado):** línea de base y metas; candidatos con métricas 7d / 7d previos / 30d
   (gasto, ventas reales, ROAS real, costo por venta, compras y ROAS que dice Meta, CTR, días de
   vida, aprendizaje, presupuesto, objetivo, cobertura de atribución, `dudoso_atribucion`);
