@@ -43,4 +43,15 @@ describe('webhook tiendanube', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(onOrderEvent).not.toHaveBeenCalled();
   });
+  it('acepta order/updated y order/cancelled', async () => {
+    const { app, onOrderEvent } = makeApp();
+    for (const event of ['order/updated', 'order/cancelled']) {
+      const body = JSON.stringify({ event, id: 1 });
+      await request(app).post('/webhooks/tiendanube')
+        .set('content-type', 'application/json')
+        .set('x-linkedstore-hmac-sha256', sign(body)).send(body);
+    }
+    await new Promise((r) => setTimeout(r, 10));
+    expect(onOrderEvent).toHaveBeenCalledTimes(2);
+  });
 });

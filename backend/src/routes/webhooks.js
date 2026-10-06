@@ -1,7 +1,7 @@
 import express from 'express';
 import { verifyTiendanubeHmac } from '../services/hmac.js';
 
-const ORDER_EVENTS = new Set(['order/created', 'order/paid']);
+const ORDER_EVENTS = new Set(['order/created', 'order/updated', 'order/paid', 'order/cancelled']);
 
 export function createWebhookRouter({ secret, onOrderEvent }) {
   const router = express.Router();
