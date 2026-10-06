@@ -48,6 +48,13 @@ describe('ordersRepo.upsert', () => {
     const { rows } = await db.query('SELECT ad_id, adset_id, campaign_id, confidence FROM order_attribution');
     expect(rows[0]).toEqual({ ad_id: '777777', adset_id: '555', campaign_id: '900', confidence: 'ad' });
   });
+  it('anuncio fuera del catálogo (borrado) toma conjunto y campaña de las filas de gasto', async () => {
+    await meta.upsertSpend([{ ad_id: '888888', date: '2026-10-01', campaign_id: '900', adset_id: '555', spend: 1, impressions: 0, clicks: 0, meta_purchases: 0, meta_purchase_value: 0 }]);
+    const tn = { ...baseTn, customer_visit: { landing_page: 'https://altorancho.com/?utm_source=meta&utm_medium=cpc&utm_content=888888', utm_parameters: {} } };
+    await orders.upsert(prepare(tn));
+    const { rows } = await db.query('SELECT adset_id, campaign_id FROM order_attribution');
+    expect(rows[0]).toEqual({ adset_id: '555', campaign_id: '900' });
+  });
   it('listForReattribution pagina por id y setAttribution reemplaza', async () => {
     await orders.upsert(prepare(baseTn));
     await orders.upsert(prepare({ ...baseTn, id: 1002, number: 501 }));

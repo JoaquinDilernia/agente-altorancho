@@ -55,6 +55,24 @@ describe('Ventas', () => {
     expect(await screen.findByRole('link', { name: /#59003/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /ver más/i })).not.toBeInTheDocument();
   });
+  it('una página de "Ver más" que llega tarde no se mezcla con un filtro nuevo', async () => {
+    let releaseOld;
+    const api = {
+      get: vi.fn((path) => {
+        if (path.startsWith('/summary')) return Promise.resolve(SUMMARY);
+        if (path.includes('cursor=C1')) return new Promise((r) => { releaseOld = () => r(PAGE2); });
+        if (path.includes('channel=organic')) return Promise.resolve({ items: [order(9, { channel: 'organic', ad_name: null })], nextCursor: null });
+        return Promise.resolve(PAGE1);
+      }),
+    };
+    render(<MemoryRouter><Ventas api={api} period={PERIOD} setPeriod={vi.fn()} /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: /ver más/i }));
+    await userEvent.click(screen.getByRole('button', { name: /orgánica/i }));
+    expect(await screen.findByRole('link', { name: /#59009/ })).toBeInTheDocument();
+    releaseOld();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole('link', { name: /#59003/ })).not.toBeInTheDocument();
+  });
   it('tocar un canal de la leyenda filtra la lista', async () => {
     const api = setup();
     await userEvent.click(await screen.findByRole('button', { name: /orgánica/i }));

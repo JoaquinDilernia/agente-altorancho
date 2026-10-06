@@ -9,11 +9,21 @@ describe('cliente meta', () => {
     const fetchFn = vi.fn()
       .mockResolvedValueOnce(ok({ data: [{ id: '1' }], paging: { cursors: { after: 'A' }, next: 'https://x' } }))
       .mockResolvedValueOnce(ok({ data: [{ id: '2' }], paging: { cursors: { after: 'B' } } }));
-    const r = await make(fetchFn).listCampaigns();
+    const r = await make(fetchFn).getDailyAdInsights('2026-10-01', '2026-10-01');
     expect(r).toEqual([{ id: '1' }, { id: '2' }]);
     const second = new URL(fetchFn.mock.calls[1][0]);
     expect(second.searchParams.get('after')).toBe('A');
-    expect(second.pathname).toBe('/v23.0/act_1/campaigns');
+    expect(second.pathname).toBe('/v23.0/act_1/insights');
+  });
+  it('el catálogo también trae lo archivado (segunda pasada filtrada) sin duplicar', async () => {
+    const fetchFn = vi.fn(async (url) => {
+      const filtering = new URL(url).searchParams.get('filtering');
+      return ok({ data: filtering ? [{ id: '2' }, { id: '1' }] : [{ id: '1' }] });
+    });
+    const r = await make(fetchFn).listCampaigns();
+    expect(r.map((c) => c.id)).toEqual(['1', '2']);
+    const filters = fetchFn.mock.calls.map((c) => new URL(c[0]).searchParams.get('filtering')).filter(Boolean);
+    expect(JSON.parse(filters[0])).toEqual([{ field: 'effective_status', operator: 'IN', value: ['ARCHIVED'] }]);
   });
   it('listAds pide el creativo con thumbnail y url_tags', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok({ data: [] }));

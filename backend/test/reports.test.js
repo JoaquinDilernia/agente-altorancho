@@ -141,6 +141,12 @@ describe('adDetail / estado', () => {
     expect(d.orders.map((o) => o.id)).toEqual(['2', '1']);
     expect(await reports.adDetail({ id: 'nope', ...DAY })).toBeNull();
   });
+  it('adDetail de un anuncio con gasto pero fuera del catálogo no da 404', async () => {
+    await createMetaRepo(db).upsertSpend([spend('1000099', '2026-10-05', 50)]);
+    const d = await reports.adDetail({ id: '1000099', ...DAY });
+    expect(d.ad).toMatchObject({ id: '1000099', level: 'ad', name: null });
+    expect(d.metrics).toMatchObject({ spend: 50, sales: 0 });
+  });
   it('coverageWeekly agrupa por semana ART', async () => {
     expect(await reports.coverageWeekly({ now: new Date('2026-10-07T12:00:00Z') }))
       .toEqual([{ week: '2026-10-05', ad: 3, campaign: 0, none: 1 }]);

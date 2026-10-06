@@ -43,3 +43,10 @@ export function loadPeriod(now = new Date()) {
 export function savePeriod(period) {
   try { localStorage.setItem(KEY, JSON.stringify(period)); } catch { /* ignorar */ }
 }
+
+// Los presets ("Hoy", "7 días"…) se recalculan con la fecha actual; "Elegir" conserva sus fechas.
+export function resolvePeriod(period, now = new Date()) {
+  if (period.preset === 'custom') return period;
+  const range = presetRange(period.preset, now);
+  return range ? { preset: period.preset, ...range } : period;
+}

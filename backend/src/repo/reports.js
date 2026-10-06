@@ -222,8 +222,16 @@ export function createReportsRepo(db) {
            FROM meta_ads WHERE id = $1`,
         [id],
       );
-      const ad = rows[0];
-      if (!ad) return null;
+      let ad = rows[0];
+      if (!ad) {
+        // Anuncio borrado/fuera del catálogo: si tiene gasto, se muestra igual con lo que sabemos
+        const { rows: sp } = await db.query(
+          'SELECT adset_id, campaign_id FROM meta_spend_daily WHERE ad_id = $1 ORDER BY date DESC LIMIT 1',
+          [id],
+        );
+        if (!sp[0]) return null;
+        ad = { id, level: 'ad', name: null, status: null, thumbnail_url: null, has_attribution_params: false, url_tags: null, parent_id: sp[0].adset_id, campaign_id: sp[0].campaign_id };
+      }
       const parentId = ad.level === 'campaign' ? null : ad.parent_id;
       const ranking = await adsRanking({ from, to, level: ad.level, parentId });
       const metrics = ranking.rows.find((r) => r.id === id)

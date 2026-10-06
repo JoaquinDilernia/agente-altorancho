@@ -19,6 +19,12 @@ const RESOLVE_SQL = [
     WHERE oa.channel = 'meta' AND oa.campaign_id IS NULL AND oa.campaign_name IS NOT NULL
       AND c.level = 'campaign' AND lower(c.name) = lower(oa.campaign_name)
       AND ($1::bigint IS NULL OR oa.order_id = $1::bigint)`,
+  // Respaldo para anuncios borrados (fuera del catálogo): el gasto diario guarda su conjunto y campaña
+  `UPDATE order_attribution oa
+      SET adset_id = COALESCE(oa.adset_id, s.adset_id), campaign_id = COALESCE(oa.campaign_id, s.campaign_id)
+     FROM (SELECT DISTINCT ON (ad_id) ad_id, adset_id, campaign_id FROM meta_spend_daily ORDER BY ad_id, date DESC) s
+    WHERE s.ad_id = oa.ad_id AND (oa.adset_id IS NULL OR oa.campaign_id IS NULL)
+      AND ($1::bigint IS NULL OR oa.order_id = $1::bigint)`,
 ];
 
 async function writeAttribution(q, orderId, a) {

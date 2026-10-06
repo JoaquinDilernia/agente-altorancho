@@ -1,4 +1,4 @@
-import { CREATIVE_COPY_FIELDS } from '../engine/urlTags.js';
+import { CREATIVE_READ_FIELDS } from '../engine/urlTags.js';
 
 const V = 'v23.0';
 const RETRYABLE = new Set([4, 17, 32, 613, 80004]); // rate limits de Graph API / Marketing API
@@ -49,12 +49,20 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
     }
   }
 
+  // Por defecto Graph no devuelve lo ARCHIVED; el histórico de gasto sí lo incluye, así que se pide aparte
+  const ARCHIVED = [{ field: 'effective_status', operator: 'IN', value: ['ARCHIVED'] }];
+  async function getCatalog(path, fields) {
+    const byId = new Map();
+    for (const row of [...await getAll(path, { fields }), ...await getAll(path, { fields, filtering: ARCHIVED })]) byId.set(row.id, row);
+    return [...byId.values()];
+  }
+
   const insightParams = (since, until) => ({ level: 'ad', time_increment: '1', time_range: { since, until }, fields: INSIGHT_FIELDS });
 
   return {
-    listCampaigns: () => getAll(`${accountId}/campaigns`, { fields: 'id,name,effective_status' }),
-    listAdsets: () => getAll(`${accountId}/adsets`, { fields: 'id,name,effective_status,campaign_id' }),
-    listAds: () => getAll(`${accountId}/ads`, { fields: 'id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,url_tags}' }),
+    listCampaigns: () => getCatalog(`${accountId}/campaigns`, 'id,name,effective_status'),
+    listAdsets: () => getCatalog(`${accountId}/adsets`, 'id,name,effective_status,campaign_id'),
+    listAds: () => getCatalog(`${accountId}/ads`, 'id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,url_tags}'),
     getDailyAdInsights: (since, until) => getAll(`${accountId}/insights`, insightParams(since, until)),
     async getDailyAdInsightsAsync(since, until) {
       const { report_run_id: runId } = await req(`${accountId}/insights`, { method: 'POST', params: insightParams(since, until) });
@@ -70,7 +78,7 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
       const json = await req(adId, { params: { fields: 'creative{id}' } });
       return json.creative.id;
     },
-    getCreative: (creativeId) => req(creativeId, { params: { fields: ['name', 'url_tags', ...CREATIVE_COPY_FIELDS].join(',') } }),
+    getCreative: (creativeId) => req(creativeId, { params: { fields: CREATIVE_READ_FIELDS.join(',') } }),
     createCreative: (spec) => req(`${accountId}/adcreatives`, { method: 'POST', body: spec }),
     updateAdCreative: (adId, creativeId) => req(adId, { method: 'POST', body: { creative: { creative_id: creativeId } } }),
   };

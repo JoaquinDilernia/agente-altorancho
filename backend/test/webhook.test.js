@@ -32,7 +32,7 @@ describe('webhook tiendanube', () => {
       .set('x-linkedstore-hmac-sha256', sign(body)).send(body);
     expect(res.status).toBe(200);
     await new Promise((r) => setTimeout(r, 10)); // handler corre post-respuesta
-    expect(onOrderEvent).toHaveBeenCalledWith({ event: 'order/paid', id: 999, store_id: 1 });
+    expect(onOrderEvent).toHaveBeenCalledWith({ event: 'order/paid', id: 999 });
   });
   it('ignora eventos que no son de órdenes', async () => {
     const { app, onOrderEvent } = makeApp();
@@ -42,6 +42,21 @@ describe('webhook tiendanube', () => {
       .set('x-linkedstore-hmac-sha256', sign(body)).send(body);
     await new Promise((r) => setTimeout(r, 10));
     expect(onOrderEvent).not.toHaveBeenCalled();
+  });
+  it('sin secret configurado acepta el aviso pero solo pasa el id numérico', async () => {
+    const onOrderEvent = vi.fn().mockResolvedValue();
+    const app = createApp({ webhookRouter: createWebhookRouter({ secret: undefined, onOrderEvent }) });
+    const ok = await request(app).post('/webhooks/tiendanube').set('content-type', 'application/json')
+      .send(JSON.stringify({ event: 'order/paid', id: 123, store_id: 1, total: '999999' }));
+    expect(ok.status).toBe(200);
+    const bad = await request(app).post('/webhooks/tiendanube').set('content-type', 'application/json')
+      .send(JSON.stringify({ event: 'order/paid', id: '1; DROP' }));
+    expect(bad.status).toBe(400);
+    const broken = await request(app).post('/webhooks/tiendanube').set('content-type', 'application/json').send('{no es json');
+    expect(broken.status).toBe(400);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(onOrderEvent).toHaveBeenCalledTimes(1);
+    expect(onOrderEvent).toHaveBeenCalledWith({ event: 'order/paid', id: 123 });
   });
   it('acepta order/updated y order/cancelled', async () => {
     const { app, onOrderEvent } = makeApp();

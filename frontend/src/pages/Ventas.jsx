@@ -108,21 +108,24 @@ export default function Ventas({ api, period, setPeriod }) {
 
   const base = `/orders?${q}${channel ? `&channel=${channel}` : ''}${term ? `&q=${encodeURIComponent(term)}` : ''}`;
 
+  // Query vigente: las respuestas de una query anterior (lista o "Ver más") se descartan
+  const currentBase = useRef(base);
+  currentBase.current = base;
+
   useEffect(() => {
-    let alive = true;
     setList({ items: [], nextCursor: null, loading: true, error: null });
     api.get(base)
-      .then((r) => alive && setList({ items: r.items, nextCursor: r.nextCursor, loading: false, error: null }))
-      .catch((e) => alive && setList((l) => ({ ...l, loading: false, error: e.message })));
-    return () => { alive = false; };
+      .then((r) => currentBase.current === base && setList({ items: r.items, nextCursor: r.nextCursor, loading: false, error: null }))
+      .catch((e) => currentBase.current === base && setList((l) => ({ ...l, loading: false, error: e.message })));
   }, [api, base]);
 
   const loadMore = useCallback(() => {
     if (!list.nextCursor || list.loading) return;
+    const requested = base;
     setList((l) => ({ ...l, loading: true }));
     api.get(`${base}&cursor=${encodeURIComponent(list.nextCursor)}`)
-      .then((r) => setList((l) => ({ items: [...l.items, ...r.items], nextCursor: r.nextCursor, loading: false, error: null })))
-      .catch((e) => setList((l) => ({ ...l, loading: false, error: e.message })));
+      .then((r) => currentBase.current === requested && setList((l) => ({ items: [...l.items, ...r.items], nextCursor: r.nextCursor, loading: false, error: null })))
+      .catch((e) => currentBase.current === requested && setList((l) => ({ ...l, loading: false, error: e.message })));
   }, [api, base, list.nextCursor, list.loading]);
 
   const sentinel = useRef(null);

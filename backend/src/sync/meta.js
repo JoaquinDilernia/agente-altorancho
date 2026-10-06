@@ -27,6 +27,7 @@ export function createMetaSync({ meta, metaRepo, ordersRepo }) {
     async syncSpend(since, until) {
       const rows = (await meta.getDailyAdInsights(since, until)).map(parseInsightRow);
       await metaRepo.upsertSpend(rows);
+      await ordersRepo.resolveMetaIds();
       return rows.length;
     },
     async backfillSpend({ days = 365, now = new Date(), onMonthDone = async () => {} } = {}) {
@@ -38,6 +39,7 @@ export function createMetaSync({ meta, metaRepo, ordersRepo }) {
         total += rows.length;
         await onMonthDone(since.slice(0, 7), total);
       }
+      await ordersRepo.resolveMetaIds();
       return total;
     },
   };
