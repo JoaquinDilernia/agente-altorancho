@@ -10,8 +10,8 @@ beforeEach(async () => { db = await createTestDb(); metaRepo = createMetaRepo(db
 afterEach(() => db.close());
 
 const fakeMeta = () => ({
-  listCampaigns: vi.fn().mockResolvedValue([{ id: 'C1', name: 'altorancho_dpa', effective_status: 'ACTIVE' }]),
-  listAdsets: vi.fn().mockResolvedValue([{ id: 'S1', name: 'Conjunto', effective_status: 'ACTIVE', campaign_id: 'C1' }]),
+  listCampaigns: vi.fn().mockResolvedValue([{ id: 'C1', name: 'altorancho_dpa', effective_status: 'ACTIVE', objective: 'OUTCOME_SALES', daily_budget: '6000000', created_time: '2026-09-01T10:00:00-0300', updated_time: '2026-09-02T10:00:00-0300' }]),
+  listAdsets: vi.fn().mockResolvedValue([{ id: 'S1', name: 'Conjunto', effective_status: 'ACTIVE', campaign_id: 'C1', created_time: '2026-09-01T10:05:00-0300', updated_time: '2026-09-03T10:00:00-0300', learning_stage_info: { status: 'LEARNING' } }]),
   listAds: vi.fn().mockResolvedValue([
     { id: 'A1', name: 'Con params', effective_status: 'ACTIVE', adset_id: 'S1', campaign_id: 'C1', creative: { id: 'CR1', thumbnail_url: 'https://t/1.jpg', url_tags: URL_TAGS_TEMPLATE } },
     { id: 'A2', name: 'Sin params', effective_status: 'PAUSED', adset_id: 'S1', campaign_id: 'C1' },
@@ -52,5 +52,16 @@ describe('metaSync', () => {
       ['2026-08-27', '2026-08-31'], ['2026-09-01', '2026-09-30'], ['2026-10-01', '2026-10-06'],
     ]);
     expect(onMonthDone).toHaveBeenCalledTimes(3);
+  });
+  it('syncCatalog guarda objetivo, presupuesto en pesos, CBO y aprendizaje', async () => {
+    await createMetaSync({ meta: fakeMeta(), metaRepo, ordersRepo }).syncCatalog();
+    const { rows } = await db.query(
+      `SELECT id, objective, daily_budget::float8 AS daily_budget, is_cbo, learning_status, created_time IS NOT NULL AS has_created
+         FROM meta_ads WHERE id IN ('C1','S1') ORDER BY id`,
+    );
+    expect(rows).toEqual([
+      { id: 'C1', objective: 'OUTCOME_SALES', daily_budget: 60000, is_cbo: true, learning_status: null, has_created: true },
+      { id: 'S1', objective: null, daily_budget: null, is_cbo: false, learning_status: 'LEARNING', has_created: true },
+    ]);
   });
 });

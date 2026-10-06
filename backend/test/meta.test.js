@@ -38,11 +38,16 @@ describe('cliente meta', () => {
     expect(r).toEqual([{ id: '1' }]);
     expect(new URL(fetchFn.mock.calls[1][0]).searchParams.get('limit')).toBe('250');
   });
-  it('listAds pide el creativo con thumbnail y url_tags', async () => {
+  it('el catálogo pide objetivo, presupuesto, fechas y aprendizaje', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok({ data: [] }));
-    await make(fetchFn).listAds();
-    expect(new URL(fetchFn.mock.calls[0][0]).searchParams.get('fields'))
-      .toBe('id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,url_tags}');
+    const meta = make(fetchFn);
+    await meta.listCampaigns();
+    await meta.listAdsets();
+    await meta.listAds();
+    const fields = fetchFn.mock.calls.map((c) => new URL(c[0]).searchParams.get('fields'));
+    expect(fields).toContain('id,name,effective_status,objective,daily_budget,created_time,updated_time');
+    expect(fields).toContain('id,name,effective_status,campaign_id,daily_budget,created_time,updated_time,learning_stage_info');
+    expect(fields).toContain('id,name,effective_status,adset_id,campaign_id,created_time,updated_time,creative{id,thumbnail_url,url_tags}');
   });
   it('getDailyAdInsights pide nivel ad, por día, con time_range', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok({ data: [] }));

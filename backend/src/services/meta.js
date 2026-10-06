@@ -72,9 +72,9 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
   const insightParams = (since, until) => ({ level: 'ad', time_increment: '1', time_range: { since, until }, fields: INSIGHT_FIELDS });
 
   return {
-    listCampaigns: () => getCatalog(`${accountId}/campaigns`, 'id,name,effective_status'),
-    listAdsets: () => getCatalog(`${accountId}/adsets`, 'id,name,effective_status,campaign_id'),
-    listAds: () => getCatalog(`${accountId}/ads`, 'id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,url_tags}', '100'),
+    listCampaigns: () => getCatalog(`${accountId}/campaigns`, 'id,name,effective_status,objective,daily_budget,created_time,updated_time'),
+    listAdsets: () => getCatalog(`${accountId}/adsets`, 'id,name,effective_status,campaign_id,daily_budget,created_time,updated_time,learning_stage_info'),
+    listAds: () => getCatalog(`${accountId}/ads`, 'id,name,effective_status,adset_id,campaign_id,created_time,updated_time,creative{id,thumbnail_url,url_tags}', '100'),
     getDailyAdInsights: (since, until) => getAll(`${accountId}/insights`, insightParams(since, until)),
     async getDailyAdInsightsAsync(since, until) {
       const { report_run_id: runId } = await req(`${accountId}/insights`, { method: 'POST', params: insightParams(since, until) });
