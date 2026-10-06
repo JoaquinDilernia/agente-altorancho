@@ -1,5 +1,5 @@
 {
-  "name": "gineza-agent-backend",
+  "name": "altorancho-backend",
   "private": true,
   "type": "module",
   "engines": { "node": ">=20" },
@@ -8,15 +8,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "firebase-admin": "^12.3.0",
-    "multer": "^1.4.5-lts.1",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.2.12",
     "supertest": "^7.0.0",
     "vitest": "^2.0.0"
   }
