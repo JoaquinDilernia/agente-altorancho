@@ -29,7 +29,7 @@ export default function Layout({ api, onLogout, children }) {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand">ALTORANCHO <span>Ventas</span></div>
+        <div className="brand"><img src="/logo-wordmark.png" alt="altorancho." className="brand-logo" /> <span>Ventas</span></div>
         <button className="link-btn" onClick={onLogout}>Salir</button>
       </header>
       {info && <div className={info.stale ? 'sync-line stale' : 'sync-line'}>{info.text}</div>}

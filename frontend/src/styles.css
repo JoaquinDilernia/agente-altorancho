@@ -118,3 +118,7 @@ table.simple th:first-child, table.simple td:first-child { text-align: left; }
 .form-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .form-row input[type=number] { width: 110px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; text-align: right; }
 .banner { padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 13px; margin-bottom: 12px; }
+
+.brand { display: flex; align-items: center; gap: 6px; }
+.brand-logo { height: 18px; width: auto; display: block; }
+.login-card .brand-logo { height: 26px; }

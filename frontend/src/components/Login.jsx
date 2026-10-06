@@ -27,7 +27,7 @@ export default function Login({ onLogin, apiUrl }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <div className="brand">ALTORANCHO <span>Ventas</span></div>
+        <div className="brand"><img src="/logo-wordmark.png" alt="altorancho." className="brand-logo" /> <span>Ventas</span></div>
         <input type="password" placeholder="Contraseña" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus />
         {error && <p className="error">{error}</p>}
         <button className="btn" type="submit" disabled={loading || !pw}>{loading ? 'Entrando…' : 'Entrar'}</button>
