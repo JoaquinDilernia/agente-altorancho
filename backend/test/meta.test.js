@@ -25,6 +25,19 @@ describe('cliente meta', () => {
     const filters = fetchFn.mock.calls.map((c) => new URL(c[0]).searchParams.get('filtering')).filter(Boolean);
     expect(JSON.parse(filters[0])).toEqual([{ field: 'effective_status', operator: 'IN', value: ['ARCHIVED'] }]);
   });
+  it('listAds pide páginas chicas (con el creativo Meta responde "reduce the amount of data" a 500)', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(ok({ data: [] }));
+    await make(fetchFn).listAds();
+    expect(new URL(fetchFn.mock.calls[0][0]).searchParams.get('limit')).toBe('100');
+  });
+  it('error 1 "reduce the amount of data" se reintenta pidiendo la mitad', async () => {
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(ok({ error: { code: 1, message: 'Please reduce the amount of data you\'re asking for, then retry your request' } }))
+      .mockResolvedValue(ok({ data: [{ id: '1' }] }));
+    const r = await make(fetchFn).getDailyAdInsights('2026-10-01', '2026-10-01');
+    expect(r).toEqual([{ id: '1' }]);
+    expect(new URL(fetchFn.mock.calls[1][0]).searchParams.get('limit')).toBe('250');
+  });
   it('listAds pide el creativo con thumbnail y url_tags', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok({ data: [] }));
     await make(fetchFn).listAds();

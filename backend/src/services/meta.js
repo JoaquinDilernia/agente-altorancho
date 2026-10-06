@@ -38,11 +38,23 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
     }
   }
 
+  // Meta responde código 1 "reduce the amount of data" si la página es muy pesada: se reintenta con la mitad
+  const TOO_MUCH_DATA = /reduce the amount of data/i;
   async function getAll(path, params) {
     const out = [];
     let after;
+    let limit = Number(params.limit || 500);
     for (;;) {
-      const json = await req(path, { params: { limit: '500', ...params, ...(after ? { after } : {}) } });
+      let json;
+      try {
+        json = await req(path, { params: { ...params, limit: String(limit), ...(after ? { after } : {}) } });
+      } catch (err) {
+        if (err.code === 1 && TOO_MUCH_DATA.test(err.message) && limit > 25) {
+          limit = Math.floor(limit / 2);
+          continue;
+        }
+        throw err;
+      }
       out.push(...(json.data || []));
       after = json.paging?.cursors?.after;
       if (!json.paging?.next || !after) return out;
@@ -51,9 +63,9 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
 
   // Por defecto Graph no devuelve lo ARCHIVED; el histórico de gasto sí lo incluye, así que se pide aparte
   const ARCHIVED = [{ field: 'effective_status', operator: 'IN', value: ['ARCHIVED'] }];
-  async function getCatalog(path, fields) {
+  async function getCatalog(path, fields, limit = '500') {
     const byId = new Map();
-    for (const row of [...await getAll(path, { fields }), ...await getAll(path, { fields, filtering: ARCHIVED })]) byId.set(row.id, row);
+    for (const row of [...await getAll(path, { fields, limit }), ...await getAll(path, { fields, limit, filtering: ARCHIVED })]) byId.set(row.id, row);
     return [...byId.values()];
   }
 
@@ -62,7 +74,7 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
   return {
     listCampaigns: () => getCatalog(`${accountId}/campaigns`, 'id,name,effective_status'),
     listAdsets: () => getCatalog(`${accountId}/adsets`, 'id,name,effective_status,campaign_id'),
-    listAds: () => getCatalog(`${accountId}/ads`, 'id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,url_tags}'),
+    listAds: () => getCatalog(`${accountId}/ads`, 'id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,url_tags}', '100'),
     getDailyAdInsights: (since, until) => getAll(`${accountId}/insights`, insightParams(since, until)),
     async getDailyAdInsightsAsync(since, until) {
       const { report_run_id: runId } = await req(`${accountId}/insights`, { method: 'POST', params: insightParams(since, until) });
