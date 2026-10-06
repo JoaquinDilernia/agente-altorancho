@@ -108,9 +108,10 @@ y el esqueleto del frontend (Layout, Login, api.js, usePolling).
 - Todos los writes son upserts idempotentes.
 - Reintentos con backoff exponencial ante 429 / 5xx / errores de rate limit de Meta
   (códigos 4, 17, 32, 613, 80004).
-- Cada corrida registra un `sync_runs`. Una sola corrida de cada tipo a la vez (lock en memoria
-  + `pg_try_advisory_lock`).
-- `/health` informa DB ok + última sincronización exitosa de cada fuente.
+- Cada corrida registra un `sync_runs`. Una sola corrida de cada tipo a la vez (lock en memoria;
+  Railway corre una sola réplica, así que no hace falta advisory lock).
+- `/health` informa DB ok; la última sincronización exitosa de cada fuente está en `GET /api/status`.
+- Backfills y re-atribución se disparan con `POST /api/sync/:job` (corren en el servidor, porque la DB de Railway es interna), no con scripts locales.
 
 ## 6. Atribución
 
