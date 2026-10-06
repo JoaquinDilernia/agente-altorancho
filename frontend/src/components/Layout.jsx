@@ -1,51 +1,44 @@
-import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { usePolling } from '../hooks/usePolling.js';
+import { fmtRelative } from '../lib/format.js';
 
 const NAV = [
-  { to: '/', label: 'Resumen', icon: '◎' },
-  { to: '/chat', label: 'Chat', icon: '◆' },
-  { to: '/ventas', label: 'Ventas', icon: '⬡' },
-  { to: '/aprobaciones', label: 'Aprobaciones', icon: '✓', badge: true },
-  { to: '/historial', label: 'Historial', icon: '≡' },
-  { to: '/creativos', label: 'Creativos', icon: '▣' },
-  { to: '/productos', label: 'Productos', icon: '⬢' },
-  { to: '/propuestas', label: 'Propuestas', icon: '✦' },
-  { to: '/config', label: 'Config', icon: '⚙' },
+  { to: '/', label: 'Ventas', icon: '◫' },
+  { to: '/anuncios', label: 'Anuncios', icon: '◎' },
+  { to: '/estado', label: 'Estado', icon: '↻' },
 ];
+const STALE_MS = 2 * 3600 * 1000;
+const KEY_SOURCES = ['tn_incremental', 'meta_spend'];
+
+function syncInfo(status) {
+  if (!status) return null;
+  const times = KEY_SOURCES.map((s) => status.lastSuccess.find((r) => r.source === s)?.finished_at).filter(Boolean);
+  if (times.length === 0) return { text: 'Sin sincronizar todavía', stale: true };
+  const oldest = times.sort()[0];
+  const failed = status.runs.some((r) => KEY_SOURCES.includes(r.source) && r.status === 'error');
+  const stale = failed || times.length < KEY_SOURCES.length || Date.now() - new Date(oldest).getTime() > STALE_MS;
+  return { text: stale ? `Datos desactualizados · ${fmtRelative(oldest)}` : `Actualizado ${fmtRelative(oldest)}`, stale };
+}
 
 export default function Layout({ api, onLogout, children }) {
-  const [pending, setPending] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      api.get('/decisions?status=pending').then((d) => alive && setPending(d.length)).catch(() => {});
-    load();
-    const id = setInterval(load, 30_000);
-    window.addEventListener('focus', load);
-    return () => {
-      alive = false;
-      clearInterval(id);
-      window.removeEventListener('focus', load);
-    };
-  }, [api]);
-
+  const { data } = usePolling(() => api.get('/status'), [api], 5 * 60_000);
+  const info = syncInfo(data);
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">GINEZA<span>agent</span></div>
-        <nav>
-          {NAV.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
-              <span className="nav-icon">{item.icon}</span>
-              {item.label}
-              {item.badge && pending > 0 && <span className="badge">{pending}</span>}
-            </NavLink>
-          ))}
-        </nav>
-        <button className="logout" onClick={onLogout}>Salir</button>
-      </aside>
+      <header className="topbar">
+        <div className="brand">ALTORANCHO <span>Ventas</span></div>
+        <button className="link-btn" onClick={onLogout}>Salir</button>
+      </header>
+      {info && <div className={info.stale ? 'sync-line stale' : 'sync-line'}>{info.text}</div>}
       <main className="content">{children}</main>
+      <nav className="bottom-nav">
+        {NAV.map((item) => (
+          <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
+            <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }

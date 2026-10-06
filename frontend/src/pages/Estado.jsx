@@ -1,3 +1,3 @@
-export default function Ventas() {
+export default function Estado() {
   return <p className="muted">Próximamente</p>;
 }

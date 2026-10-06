@@ -1,12 +1,13 @@
 {
-  "name": "gineza-agent-frontend",
+  "name": "altorancho-frontend",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate-pwa-assets": "pwa-assets-generator"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -17,9 +18,11 @@
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.5.2",
+    "@vite-pwa/assets-generator": "^0.2.6",
     "@vitejs/plugin-react": "^4.3.1",
     "jsdom": "^24.1.1",
     "vite": "^5.4.0",
+    "vite-plugin-pwa": "^0.20.5",
     "vitest": "^2.0.0"
   }
 }

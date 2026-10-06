@@ -10,7 +10,7 @@ export default function Login({ onLogin, apiUrl }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${apiUrl}/config`, { headers: { Authorization: `Bearer ${pw}` } });
+      const res = await fetch(`${apiUrl}/status`, { headers: { Authorization: `Bearer ${pw}` } });
       if (res.status === 401) {
         setError('Contraseña incorrecta');
         return;
@@ -18,7 +18,7 @@ export default function Login({ onLogin, apiUrl }) {
       if (!res.ok) throw new Error(`Error ${res.status}`);
       onLogin(pw);
     } catch {
-      setError('No se pudo conectar con el backend');
+      setError('No se pudo conectar con el servidor');
     } finally {
       setLoading(false);
     }
@@ -27,19 +27,10 @@ export default function Login({ onLogin, apiUrl }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <div className="login-brand">GINEZA<span>agent</span></div>
-        <p className="login-sub">Agente autónomo de optimización</p>
-        <input
-          type="password"
-          placeholder="Contraseña"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          autoFocus
-        />
-        {error && <p className="login-error">{error}</p>}
-        <button type="submit" disabled={loading || !pw}>
-          {loading ? 'Entrando…' : 'Entrar'}
-        </button>
+        <div className="brand">ALTORANCHO <span>Ventas</span></div>
+        <input type="password" placeholder="Contraseña" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus />
+        {error && <p className="error">{error}</p>}
+        <button className="btn" type="submit" disabled={loading || !pw}>{loading ? 'Entrando…' : 'Entrar'}</button>
       </form>
     </div>
   );
