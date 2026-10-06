@@ -26,6 +26,8 @@ import { createAgentRunner } from './agent/runner.js';
 import { createExecutor } from './agent/executor.js';
 import { createOutcomeMeter } from './agent/outcomes.js';
 import { createAgentRouter } from './routes/agent.js';
+import { createGoogleRepo } from './repo/google.js';
+import { createIngestRouter } from './routes/ingest.js';
 import { createApp } from './app.js';
 import { createWebhookRouter } from './routes/webhooks.js';
 import { createApiRouter } from './routes/api.js';
@@ -82,6 +84,7 @@ async function onOrderEvent(event) {
 const distDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
 const app = createApp({
   corsOrigin: process.env.FRONTEND_ORIGIN,
+  ingestRouter: createIngestRouter({ token: process.env.GOOGLE_INGEST_TOKEN, googleRepo: createGoogleRepo(db), syncRuns }),
   webhookRouter: createWebhookRouter({ secret: process.env.TIENDANUBE_WEBHOOK_SECRET, onOrderEvent }),
   apiRouter: [
     createAuthMiddleware({ password: env('DASHBOARD_PASSWORD') }),

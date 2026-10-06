@@ -41,7 +41,36 @@ const SORTS = {
 };
 
 export function createReportsRepo(db) {
-  async function adsRanking({ from, to, level = 'campaign', parentId = null, sort = 'spend' }) {
+  async function googleRanking({ from, to, sort = 'spend' }) {
+    const { rows } = await db.query(
+      `WITH sp AS (
+         SELECT campaign_id AS id, sum(spend) AS s, sum(impressions) AS imp, sum(clicks) AS clk,
+                sum(conversions) AS mp, sum(conversions_value) AS mv
+           FROM google_spend_daily WHERE date BETWEEN $1::date AND $2::date GROUP BY 1),
+       sa AS (
+         SELECT a.campaign_id AS id, count(*) AS n, sum(o.total) AS rev
+           FROM orders o JOIN order_attribution a ON a.order_id = o.id
+          WHERE a.channel = 'google' AND a.campaign_id IS NOT NULL AND ${PAID} AND ${RANGE(1, 2)}
+          GROUP BY 1)
+       SELECT COALESCE(sp.id, sa.id) AS id, g.name, g.status, NULL AS thumbnail_url,
+              COALESCE(sp.s, 0)::float8 AS spend, COALESCE(sp.imp, 0)::int AS impressions, COALESCE(sp.clk, 0)::int AS clicks,
+              COALESCE(sp.mp, 0)::float8 AS meta_purchases, COALESCE(sp.mv, 0)::float8 AS meta_value,
+              COALESCE(sa.n, 0)::int AS sales, COALESCE(sa.rev, 0)::float8 AS revenue
+         FROM sp FULL OUTER JOIN sa ON sa.id = sp.id
+         LEFT JOIN google_campaigns g ON g.id = COALESCE(sp.id, sa.id)`,
+      [from, to],
+    );
+    const { rows: [u] } = await db.query(
+      `SELECT count(*)::int AS orders, COALESCE(sum(o.total), 0)::float8 AS revenue
+         FROM orders o JOIN order_attribution a ON a.order_id = o.id
+        WHERE a.channel = 'google' AND a.campaign_id IS NULL AND ${PAID} AND ${RANGE(1, 2)}`,
+      [from, to],
+    );
+    return { level: 'campaign', platform: 'google', rows: rows.map(enrich).sort(SORTS[sort] || SORTS.spend), unidentified: u };
+  }
+
+  async function adsRanking({ from, to, level = 'campaign', parentId = null, sort = 'spend', platform = 'meta' }) {
+    if (platform === 'google') return googleRanking({ from, to, sort });
     const key = KEY[level];
     if (!key) throw badRequest('level inválido');
     const params = [from, to];
@@ -112,6 +141,27 @@ export function createReportsRepo(db) {
       const m = channels.find((c) => c.channel === 'meta') || { orders: 0, revenue: 0 };
       const coverage = { ad: 0, campaign: 0, none: 0 };
       for (const c of cov) coverage[c.confidence] = c.n;
+      const { rows: [gs] } = await db.query(
+        `SELECT COALESCE(sum(spend), 0)::float8 AS spend, COALESCE(sum(conversions), 0)::float8 AS conversions,
+                COALESCE(sum(conversions_value), 0)::float8 AS value
+           FROM google_spend_daily WHERE date BETWEEN $1::date AND $2::date`,
+        [from, to],
+      );
+      const { rows: gcov } = await db.query(
+        `SELECT a.confidence, count(*)::int AS n FROM orders o JOIN order_attribution a ON a.order_id = o.id
+          WHERE a.channel = 'google' AND ${PAID} AND ${RANGE(1, 2)} GROUP BY 1`,
+        [from, to],
+      );
+      const g = channels.find((c) => c.channel === 'google') || { orders: 0, revenue: 0 };
+      const googleCoverage = { campaign: 0, none: 0 };
+      for (const c of gcov) googleCoverage[c.confidence] = c.n;
+      const google = {
+        spend: gs.spend, orders: g.orders, revenue: g.revenue,
+        roas: ratio(g.revenue, gs.spend),
+        costPerSale: gs.spend > 0 && g.orders > 0 ? gs.spend / g.orders : null,
+        reported: { conversions: gs.conversions, value: gs.value, roas: ratio(gs.value, gs.spend) },
+        coverage: googleCoverage,
+      };
       return {
         from, to, revenue: tot.revenue, orders: tot.orders, avgTicket: ratio(tot.revenue, tot.orders), channels,
         meta: {
@@ -121,6 +171,7 @@ export function createReportsRepo(db) {
           reported: { purchases: sp.purchases, value: sp.value, roas: ratio(sp.value, sp.spend) },
         },
         coverage,
+        google,
       };
     },
 
@@ -155,10 +206,11 @@ export function createReportsRepo(db) {
         `SELECT o.id::text AS id, o.number, o.created_at, o.total::float8 AS total, o.status, o.payment_status,
                 o.cancelled_at IS NOT NULL AS cancelled, o.customer_name,
                 COALESCE(a.channel, 'unknown') AS channel, a.confidence, a.ad_id, a.campaign_id,
-                COALESCE(c.name, a.campaign_name) AS campaign_name, ad.name AS ad_name
+                COALESCE(c.name, gc.name, a.campaign_name) AS campaign_name, ad.name AS ad_name
            FROM orders o
            LEFT JOIN order_attribution a ON a.order_id = o.id
            LEFT JOIN meta_ads c ON c.id = a.campaign_id
+           LEFT JOIN google_campaigns gc ON gc.id = a.campaign_id AND a.channel = 'google'
            LEFT JOIN meta_ads ad ON ad.id = a.ad_id
           WHERE ${where.join(' AND ')}
           ORDER BY o.created_at DESC, o.id DESC
@@ -177,12 +229,13 @@ export function createReportsRepo(db) {
                 o.shipping_cost_customer::float8 AS shipping_cost_customer, o.currency, o.gateway_name, o.storefront,
                 o.customer_name, o.customer_email, o.landing_url, o.visit_landing_page, o.visit_created_at,
                 COALESCE(a.channel, 'unknown') AS channel, a.confidence, a.ad_id, a.adset_id, a.campaign_id, a.source_raw,
-                COALESCE(c.name, a.campaign_name) AS campaign_name, ad.name AS ad_name, ad.thumbnail_url, s.name AS adset_name
+                COALESCE(c.name, gc.name, a.campaign_name) AS campaign_name, ad.name AS ad_name, ad.thumbnail_url, s.name AS adset_name
            FROM orders o
            LEFT JOIN order_attribution a ON a.order_id = o.id
            LEFT JOIN meta_ads ad ON ad.id = a.ad_id
            LEFT JOIN meta_ads s ON s.id = a.adset_id
            LEFT JOIN meta_ads c ON c.id = a.campaign_id
+           LEFT JOIN google_campaigns gc ON gc.id = a.campaign_id AND a.channel = 'google'
           WHERE o.id = $1::bigint`,
         [id],
       );

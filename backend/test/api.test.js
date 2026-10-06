@@ -71,7 +71,10 @@ describe('api', () => {
     const { get, deps } = setup();
     expect((await get('/api/ads?from=2026-10-01&to=2026-10-05&level=foo')).status).toBe(400);
     await get('/api/ads?from=2026-10-01&to=2026-10-05&level=ad&parent=55&sort=cps');
-    expect(deps.reports.adsRanking).toHaveBeenCalledWith({ from: '2026-10-01', to: '2026-10-05', level: 'ad', parentId: '55', sort: 'cps' });
+    expect(deps.reports.adsRanking).toHaveBeenCalledWith({ from: '2026-10-01', to: '2026-10-05', level: 'ad', parentId: '55', sort: 'cps', platform: 'meta' });
+    await get('/api/ads?from=2026-10-01&to=2026-10-05&platform=google');
+    expect(deps.reports.adsRanking).toHaveBeenLastCalledWith({ from: '2026-10-01', to: '2026-10-05', level: 'campaign', parentId: null, sort: 'spend', platform: 'google' });
+    expect((await get('/api/ads?from=2026-10-01&to=2026-10-05&platform=tiktok')).status).toBe(400);
     const mp = await get('/api/ads/missing-params');
     expect(mp.body).toEqual([{ id: '1' }]);
     expect(deps.reports.adDetail).not.toHaveBeenCalled();

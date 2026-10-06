@@ -4,7 +4,7 @@ import { isYmd } from '../engine/dates.js';
 const CHANNELS = new Set(['meta', 'google', 'organic', 'email', 'social_organic', 'other', 'unknown']);
 const LEVELS = new Set(['campaign', 'adset', 'ad']);
 const SORTS = new Set(['spend', 'cps', 'roas']);
-const SOURCES = ['tn_backfill', 'tn_incremental', 'tn_webhook', 'meta_catalog', 'meta_spend', 'meta_backfill', 'meta_url_tags', 'reattribute'];
+const SOURCES = ['tn_backfill', 'tn_incremental', 'tn_webhook', 'meta_catalog', 'meta_spend', 'meta_backfill', 'meta_url_tags', 'reattribute', 'google_ingest'];
 const MAX_DAYS = 366;
 
 const badRequest = (msg) => Object.assign(new Error(msg), { status: 400 });
@@ -38,11 +38,13 @@ export function createApiRouter({ reports, syncRuns, metaRepo, urlTagger, jobs, 
   router.get('/ads/missing-params', wrap(async (_req, res) => res.json(await metaRepo.listAdsMissingParams())));
 
   router.get('/ads', wrap(async (req, res) => {
-    const level = req.query.level || 'campaign';
+    const platform = req.query.platform || 'meta';
+    if (!['meta', 'google'].includes(platform)) throw badRequest('platform inválido');
+    const level = platform === 'google' ? 'campaign' : req.query.level || 'campaign';
     const sort = req.query.sort || 'spend';
     if (!LEVELS.has(level)) throw badRequest('level inválido');
     if (!SORTS.has(sort)) throw badRequest('sort inválido');
-    res.json(await reports.adsRanking({ ...period(req), level, parentId: req.query.parent || null, sort }));
+    res.json(await reports.adsRanking({ ...period(req), level, parentId: platform === 'google' ? null : req.query.parent || null, sort, platform }));
   }));
 
   router.get('/ads/:id', wrap(async (req, res) => {
