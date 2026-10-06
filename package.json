@@ -1,0 +1,9 @@
+{
+  "name": "altorancho-ventas",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "npm --prefix frontend ci --include=dev && npm --prefix frontend run build && npm --prefix backend ci --omit=dev",
+    "start": "npm --prefix backend start"
+  }
+}
