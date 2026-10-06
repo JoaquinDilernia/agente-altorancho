@@ -6,6 +6,7 @@ const NAV = [
   { to: '/', label: 'Ventas', icon: '◫' },
   { to: '/anuncios', label: 'Anuncios', icon: '◎' },
   { to: '/estado', label: 'Estado', icon: '↻' },
+  { to: '/agente', label: 'Agente', icon: '✦' },
 ];
 const STALE_MS = 2 * 3600 * 1000;
 const KEY_SOURCES = ['tn_incremental', 'meta_spend'];
@@ -23,6 +24,8 @@ function syncInfo(status) {
 export default function Layout({ api, onLogout, children }) {
   const { data } = usePolling(() => api.get('/status'), [api], 5 * 60_000);
   const info = syncInfo(data);
+  const { data: agent } = usePolling(() => api.get('/agent/overview'), [api], 5 * 60_000);
+  const pending = agent?.pendingCount || 0;
   return (
     <div className="shell">
       <header className="topbar">
@@ -36,6 +39,7 @@ export default function Layout({ api, onLogout, children }) {
           <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
             <span className="nav-icon" aria-hidden="true">{item.icon}</span>
             {item.label}
+            {item.to === '/agente' && pending > 0 && <span className="nav-badge" aria-label={`${pending} pendientes`}>{pending}</span>}
           </NavLink>
         ))}
       </nav>

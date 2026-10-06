@@ -9,6 +9,7 @@ import OrderDetail from './pages/OrderDetail.jsx';
 import Anuncios from './pages/Anuncios.jsx';
 import AdDetail from './pages/AdDetail.jsx';
 import Estado from './pages/Estado.jsx';
+import Agente from './pages/Agente.jsx';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 const PW_KEY = 'ar_pw';
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/anuncios" element={<Anuncios {...props} />} />
         <Route path="/anuncios/:id" element={<AdDetail {...props} />} />
         <Route path="/estado" element={<Estado {...props} />} />
+        <Route path="/agente" element={<Agente {...props} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

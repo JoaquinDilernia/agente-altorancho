@@ -105,6 +105,12 @@ export default function Anuncios({ api, period, setPeriod }) {
   const navigate = useNavigate();
   const [stack, setStack] = useState([{ level: 'campaign', parentId: null, name: 'Campañas' }]);
   const [sort, setSort] = useState('spend');
+  const [refs, setRefs] = useState(() => new Set());
+  useEffect(() => {
+    api.get('/recommendations/refs')
+      .then((r) => setRefs(new Set((Array.isArray(r) ? r : []).flatMap((x) => [x.object_id, x.target_id]).filter(Boolean))))
+      .catch(() => {});
+  }, [api]);
   const cur = stack[stack.length - 1];
   const q = `${periodQuery(period)}&level=${cur.level}&sort=${sort}${cur.parentId ? `&parent=${cur.parentId}` : ''}`;
   const { data, error } = usePolling(() => api.get(`/ads?${q}`), [api, q], 120_000);
@@ -142,6 +148,7 @@ export default function Anuncios({ api, period, setPeriod }) {
                     <div className="row-sub">
                       <span>{fmtNumber(r.sales)} ventas · Meta dice {fmtNumber(r.metaPurchases)}</span>
                       {r.noSales && <span className="badge warn">Gastó sin ventas</span>}
+                      {refs.has(r.id) && <span className="badge">Recomendación pendiente</span>}
                     </div>
                   </div>
                   <div className="row-side">

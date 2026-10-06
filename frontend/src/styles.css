@@ -100,3 +100,21 @@ table.simple th:first-child, table.simple td:first-child { text-align: left; }
   .card.wide { grid-column: span 2; }
 }
 .row-btn { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); text-align: left; }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; }
+.rec { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.rec-head { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.rec-title { font-weight: 600; font-size: 15px; }
+.rec-object { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; font-size: 13px; }
+.rec-grid dt { color: var(--muted); font-size: 11px; }
+.rec details { font-size: 13px; margin-top: 6px; }
+.rec details summary { cursor: pointer; color: var(--muted); }
+.amount { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.amount input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 15px; color: var(--text); }
+.reasons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.nav-badge { position: absolute; top: 6px; margin-left: 18px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--warn); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
+.bottom-nav a { position: relative; }
+.form-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.form-row input[type=number] { width: 110px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; text-align: right; }
+.banner { padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 13px; margin-bottom: 12px; }
