@@ -24,6 +24,10 @@ export function createIngestRouter({ token, googleRepo, syncRuns, log = console 
       runId = await syncRuns.start('google_ingest');
       await googleRepo.upsertCampaigns(parsed.campaigns);
       await googleRepo.upsertSpend(parsed.spend);
+      if (parsed.entities.length) {
+        await googleRepo.upsertEntities(parsed.entities);
+        await googleRepo.resolveCampaigns();
+      }
       await syncRuns.finish(runId, { status: 'ok', rows: parsed.spend.length });
       res.json({ ok: true, rows: parsed.spend.length });
     } catch (err) {

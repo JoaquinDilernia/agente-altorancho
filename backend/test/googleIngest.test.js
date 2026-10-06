@@ -16,12 +16,22 @@ const payload = (o = {}) => ({
 describe('parseGooglePayload', () => {
   it('convierte micros a pesos con centavos', () => {
     expect(parseGooglePayload(payload()).spend[0]).toEqual({
-      campaign_id: '11472612872', date: '2026-10-05', spend: 1234.57, impressions: 1000, clicks: 50, conversions: 3.5, conversions_value: 210000,
+      campaign_id: '11472612872', date: '2026-10-05', spend: 1234.57, impressions: 1000, clicks: 50, conversions: 3.5, conversions_value: 210000, purchases: 0, purchases_value: 0,
     });
   });
   it('acepta conversiones negativas (ajustes de Google) pero no costo negativo', () => {
     const r = parseGooglePayload(payload({ rows: [{ ...payload().rows[0], conversions: -1, conversions_value: -5000 }] })).spend[0];
     expect(r).toMatchObject({ conversions: -1, conversions_value: -5000 });
+  });
+  it('acepta entidades (grupos) con su campaña y compras opcionales por fila', () => {
+    const p = parseGooglePayload(payload({
+      entities: [{ id: '21694934859', campaign_id: '21694933125', type: 'asset_group' }],
+      rows: [{ ...payload().rows[0], purchases: 2, purchases_value: 90000 }],
+    }));
+    expect(p.entities).toEqual([{ id: '21694934859', campaign_id: '21694933125', type: 'asset_group' }]);
+    expect(p.spend[0]).toMatchObject({ purchases: 2, purchases_value: 90000 });
+    expect(parseGooglePayload(payload()).spend[0]).toMatchObject({ purchases: 0, purchases_value: 0 });
+    expect(parseGooglePayload(payload()).entities).toEqual([]);
   });
   it('rechaza ids, fechas o números inválidos', () => {
     expect(() => parseGooglePayload({})).toThrow(/payload/);
@@ -69,5 +79,16 @@ describe('POST /ingest/google', () => {
     const app2 = createApp({ ingestRouter: createIngestRouter({ token: 'secreto', googleRepo: createGoogleRepo(db), syncRuns: broken, log: { error: () => {} } }) });
     const res = await request(app2).post('/ingest/google').set('x-ingest-token', 'secreto').send(payload());
     expect(res.status).toBe(500);
+  });
+  it('las ventas atribuidas a un grupo pasan a su campaña', async () => {
+    const { createOrdersRepo } = await import('../src/repo/orders.js');
+    const { mapOrder } = await import('../src/engine/mapOrder.js');
+    const { attribute } = await import('../src/engine/attribution.js');
+    const m = mapOrder({ id: 1, number: 1, status: 'open', payment_status: 'paid', created_at: '2026-10-05T15:00:00+0000', total: '1000', products: [],
+      customer_visit: { landing_page: 'https://altorancho.com/?pf=mc&gad_campaignid=21694934859&gclid=x', utm_parameters: {} } });
+    await createOrdersRepo(db).upsert({ ...m, attribution: attribute(m.visit) });
+    await post(payload({ entities: [{ id: '21694934859', campaign_id: '11472612872', type: 'asset_group' }] }));
+    const { rows } = await db.query('SELECT campaign_id FROM order_attribution WHERE order_id = 1');
+    expect(rows[0].campaign_id).toBe('11472612872');
   });
 });

@@ -34,7 +34,13 @@ export function parseGooglePayload(body) {
       clicks: Math.round(num(r.clicks, 'clicks')),
       conversions: signed(r.conversions, 'conversions'),
       conversions_value: signed(r.conversions_value, 'conversions_value'),
+      purchases: signed(r.purchases ?? 0, 'purchases'),
+      purchases_value: signed(r.purchases_value ?? 0, 'purchases_value'),
     };
   });
-  return { campaigns, spend };
+  const entities = (Array.isArray(body.entities) ? body.entities : []).map((e) => {
+    if (!isId(e?.id) || !isId(e?.campaign_id)) throw bad('entity inválida');
+    return { id: String(e.id), campaign_id: String(e.campaign_id), type: text(e.type, 40) };
+  });
+  return { campaigns, spend, entities };
 }

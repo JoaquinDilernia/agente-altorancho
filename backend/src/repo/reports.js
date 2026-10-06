@@ -45,7 +45,7 @@ export function createReportsRepo(db) {
     const { rows } = await db.query(
       `WITH sp AS (
          SELECT campaign_id AS id, sum(spend) AS s, sum(impressions) AS imp, sum(clicks) AS clk,
-                sum(conversions) AS mp, sum(conversions_value) AS mv
+                sum(purchases) AS mp, sum(purchases_value) AS mv
            FROM google_spend_daily WHERE date BETWEEN $1::date AND $2::date GROUP BY 1),
        sa AS (
          SELECT a.campaign_id AS id, count(*) AS n, sum(o.total) AS rev
@@ -142,8 +142,8 @@ export function createReportsRepo(db) {
       const coverage = { ad: 0, campaign: 0, none: 0 };
       for (const c of cov) coverage[c.confidence] = c.n;
       const { rows: [gs] } = await db.query(
-        `SELECT COALESCE(sum(spend), 0)::float8 AS spend, COALESCE(sum(conversions), 0)::float8 AS conversions,
-                COALESCE(sum(conversions_value), 0)::float8 AS value
+        `SELECT COALESCE(sum(spend), 0)::float8 AS spend, COALESCE(sum(purchases), 0)::float8 AS conversions,
+                COALESCE(sum(purchases_value), 0)::float8 AS value
            FROM google_spend_daily WHERE date BETWEEN $1::date AND $2::date`,
         [from, to],
       );

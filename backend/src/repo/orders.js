@@ -25,6 +25,10 @@ const RESOLVE_SQL = [
      FROM (SELECT DISTINCT ON (ad_id) ad_id, adset_id, campaign_id FROM meta_spend_daily ORDER BY ad_id, date DESC) s
     WHERE s.ad_id = oa.ad_id AND (oa.adset_id IS NULL OR oa.campaign_id IS NULL)
       AND ($1::bigint IS NULL OR oa.order_id = $1::bigint)`,
+  `UPDATE order_attribution oa SET campaign_id = e.campaign_id
+     FROM google_entities e
+    WHERE oa.channel = 'google' AND oa.campaign_id = e.id
+      AND ($1::bigint IS NULL OR oa.order_id = $1::bigint)`,
 ];
 
 async function writeAttribution(q, orderId, a) {

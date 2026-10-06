@@ -13,8 +13,8 @@ beforeAll(async () => {
   const google = createGoogleRepo(db);
   await google.upsertCampaigns([{ id: '111111', name: 'Search Marca', status: 'ENABLED', channel_type: 'SEARCH' }, { id: '222222', name: 'PMax', status: 'ENABLED', channel_type: 'PERFORMANCE_MAX' }]);
   await google.upsertSpend([
-    { campaign_id: '111111', date: '2026-10-05', spend: 1000, impressions: 1, clicks: 1, conversions: 4, conversions_value: 9000 },
-    { campaign_id: '222222', date: '2026-10-05', spend: 500, impressions: 1, clicks: 1, conversions: 1, conversions_value: 1000 },
+    { campaign_id: '111111', date: '2026-10-05', spend: 1000, impressions: 1, clicks: 1, conversions: 40, conversions_value: 900000, purchases: 4, purchases_value: 9000 },
+    { campaign_id: '222222', date: '2026-10-05', spend: 500, impressions: 1, clicks: 1, conversions: 10, conversions_value: 100000, purchases: 1, purchases_value: 1000 },
   ]);
   const orders = createOrdersRepo(db);
   const seed = [
