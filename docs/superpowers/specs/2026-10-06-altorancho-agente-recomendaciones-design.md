@@ -156,7 +156,7 @@ Nueva pestaña **Agente** (4ª en la barra inferior, con globito de pendientes):
 1. **Pendientes** (default): cabecera con último análisis, costo y botón "Analizar ahora (te quedan N)";
    tarjetas con etiquetas de acción y confianza, antes → esperado (ROAS real, costo por venta,
    gasto, Meta dice), "Por qué" desplegable, campo de monto ajustable, Aprobar / Rechazar con
-   motivo rápido; debajo, Ideas (marcar vista/útil).
+   motivo rápido; debajo, Ideas (marcar como vista).
 2. **Historial**: filtros estado/tipo, decisión, ejecución, resultado medido, Deshacer (24 h).
 3. **Aprendizaje**: precisión por tipo y lecciones con evidencia y borrar.
 4. **Configuración**: interruptores, umbrales, topes, vencimiento, tope mensual y consumo del mes,
