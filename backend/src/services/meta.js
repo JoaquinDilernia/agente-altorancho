@@ -1,19 +1,20 @@
-const V = 'v23.0';
-const RETRYABLE = new Set([17, 32, 613]); // rate limits de Graph API
+import { CREATIVE_COPY_FIELDS } from '../engine/urlTags.js';
 
-export function createMetaClient({ accessToken, accountId, fetchFn = fetch, retryDelayMs = 2000 }) {
+const V = 'v23.0';
+const RETRYABLE = new Set([4, 17, 32, 613, 80004]); // rate limits de Graph API / Marketing API
+const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const INSIGHT_FIELDS = 'ad_id,adset_id,campaign_id,spend,impressions,clicks,actions,action_values,date_start';
+
+export function createMetaClient({ accessToken, accountId, fetchFn = fetch, sleep = defaultSleep, maxRetries = 4, pollMs = 3000 }) {
   const BASE = `https://graph.facebook.com/${V}`;
 
-  async function reqOnce(path, { method = 'GET', params = {}, body, form } = {}) {
+  async function reqOnce(path, { method = 'GET', params = {}, body } = {}) {
     const url = new URL(`${BASE}/${path}`);
     url.searchParams.set('access_token', accessToken);
-    for (const [k, v] of Object.entries(params)) {
-      url.searchParams.set(k, typeof v === 'string' ? v : JSON.stringify(v));
-    }
-    const res = await fetchFn(url, {
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, typeof v === 'string' ? v : JSON.stringify(v));
+    const res = await fetchFn(url.toString(), {
       method,
-      // form: multipart (fetch arma el boundary solo, NO setear Content-Type)
-      ...(form ? { body: form } : body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+      ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
     });
     const json = await res.json();
     if (json.error) {
@@ -27,67 +28,50 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, retr
   }
 
   async function req(path, opts) {
-    try {
-      return await reqOnce(path, opts);
-    } catch (err) {
-      if (RETRYABLE.has(err.code)) {
-        await new Promise((r) => setTimeout(r, retryDelayMs));
-        return reqOnce(path, opts);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await reqOnce(path, opts);
+      } catch (err) {
+        if (!RETRYABLE.has(err.code) || attempt >= maxRetries) throw err;
+        await sleep(5000 * 2 ** attempt);
       }
-      throw err;
     }
   }
 
-  const FIELDS = {
-    campaign: 'id,name,status,effective_status,daily_budget',
-    adset: 'id,name,status,effective_status,daily_budget,campaign_id',
-    ad: 'id,name,status,effective_status,adset_id',
-    insights: 'campaign_id,adset_id,ad_id,ad_name,spend,purchase_roas,actions,action_values',
-  };
+  async function getAll(path, params) {
+    const out = [];
+    let after;
+    for (;;) {
+      const json = await req(path, { params: { limit: '500', ...params, ...(after ? { after } : {}) } });
+      out.push(...(json.data || []));
+      after = json.paging?.cursors?.after;
+      if (!json.paging?.next || !after) return out;
+    }
+  }
+
+  const insightParams = (since, until) => ({ level: 'ad', time_increment: '1', time_range: { since, until }, fields: INSIGHT_FIELDS });
 
   return {
-    getCampaigns: () => req(`${accountId}/campaigns`, { params: { fields: FIELDS.campaign, limit: '100' } }),
-    getAdsets: () => req(`${accountId}/adsets`, { params: { fields: FIELDS.adset, limit: '200' } }),
-    getAds: () => req(`${accountId}/ads`, { params: { fields: FIELDS.ad, limit: '500' } }),
-    getInsights: (level, since, until) => req(`${accountId}/insights`, {
-      params: { level, fields: FIELDS.insights, time_range: { since, until }, limit: '500' },
-    }),
-    pauseAd: (adId) => req(adId, { method: 'POST', body: { status: 'PAUSED' } }),
-    pauseCampaign: (id) => req(id, { method: 'POST', body: { status: 'PAUSED' } }),
-    updateBudget: (objectId, dailyBudgetCents) => req(objectId, { method: 'POST', body: { daily_budget: dailyBudgetCents } }),
-    updateAdsetStatus: (id, status) => req(id, { method: 'POST', body: { status } }),
-    createAdset: (payload) => req(`${accountId}/adsets`, { method: 'POST', body: payload }),
-    createCampaign: (payload) => req(`${accountId}/campaigns`, { method: 'POST', body: payload }),
-    async uploadImage(buffer) {
-      const json = await req(`${accountId}/adimages`, { method: 'POST', body: { bytes: buffer.toString('base64') } });
-      return Object.values(json.images)[0].hash;
+    listCampaigns: () => getAll(`${accountId}/campaigns`, { fields: 'id,name,effective_status' }),
+    listAdsets: () => getAll(`${accountId}/adsets`, { fields: 'id,name,effective_status,campaign_id' }),
+    listAds: () => getAll(`${accountId}/ads`, { fields: 'id,name,effective_status,adset_id,campaign_id,creative{id,thumbnail_url,url_tags}' }),
+    getDailyAdInsights: (since, until) => getAll(`${accountId}/insights`, insightParams(since, until)),
+    async getDailyAdInsightsAsync(since, until) {
+      const { report_run_id: runId } = await req(`${accountId}/insights`, { method: 'POST', params: insightParams(since, until) });
+      for (let i = 0; i < 400; i += 1) {
+        const status = await req(runId, { params: { fields: 'async_status,async_percent_completion' } });
+        if (status.async_status === 'Job Completed') return getAll(`${runId}/insights`, {});
+        if (['Job Failed', 'Job Skipped'].includes(status.async_status)) throw new Error(`Reporte de Meta ${runId}: ${status.async_status}`);
+        await sleep(pollMs);
+      }
+      throw new Error(`Reporte de Meta ${runId}: timeout`);
     },
-    async uploadVideo(buffer, filename = 'video.mp4') {
-      const form = new FormData();
-      form.append('source', new Blob([buffer], { type: 'video/mp4' }), filename);
-      const json = await req(`${accountId}/advideos`, { method: 'POST', form });
-      return json.id;
+    async getAdCreativeId(adId) {
+      const json = await req(adId, { params: { fields: 'creative{id}' } });
+      return json.creative.id;
     },
-    async getVideoStatus(videoId) {
-      const json = await req(videoId, { params: { fields: 'status' } });
-      return json.status?.video_status || 'unknown';
-    },
-    async getVideoThumbnail(videoId) {
-      const json = await req(`${videoId}/thumbnails`);
-      const thumbs = json.data || [];
-      if (thumbs.length === 0) throw new Error(`el video ${videoId} no tiene thumbnails todavía`);
-      return (thumbs.find((t) => t.is_preferred) || thumbs[0]).uri;
-    },
+    getCreative: (creativeId) => req(creativeId, { params: { fields: ['name', 'url_tags', ...CREATIVE_COPY_FIELDS].join(',') } }),
     createCreative: (spec) => req(`${accountId}/adcreatives`, { method: 'POST', body: spec }),
-    async searchInterests(query) {
-      // endpoint de búsqueda de segmentación: NO va bajo la cuenta publicitaria
-      const json = await req('search', { params: { type: 'adinterest', q: query, limit: '20' } });
-      return (json.data || []).map((d) => ({
-        id: d.id, name: d.name,
-        audienceMin: d.audience_size_lower_bound, audienceMax: d.audience_size_upper_bound,
-      }));
-    },
-    createAd: ({ name, adsetId, creativeId, status = 'ACTIVE' }) =>
-      req(`${accountId}/ads`, { method: 'POST', body: { name, adset_id: adsetId, creative: { creative_id: creativeId }, status } }),
+    updateAdCreative: (adId, creativeId) => req(adId, { method: 'POST', body: { creative: { creative_id: creativeId } } }),
   };
 }
