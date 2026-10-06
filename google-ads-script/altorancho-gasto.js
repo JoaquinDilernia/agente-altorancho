@@ -11,7 +11,9 @@ function main() {
   var fmt = function (d) { return Utilities.formatDate(d, tz, 'yyyy-MM-dd'); };
   var hoy = new Date();
   if (!HISTORICO) {
-    var desde = new Date(hoy.getTime() - 3 * 86400000);
+    // una vez por día reenvía 30 días: Google sigue ajustando conversiones durante semanas
+    var dias = hoy.getHours() === 7 ? 30 : 3;
+    var desde = new Date(hoy.getTime() - dias * 86400000);
     enviar(fmt(desde), fmt(hoy));
     return;
   }

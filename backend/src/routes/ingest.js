@@ -19,15 +19,17 @@ export function createIngestRouter({ token, googleRepo, syncRuns, log = console 
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message });
     }
-    const runId = await syncRuns.start('google_ingest');
+    let runId = null;
     try {
+      runId = await syncRuns.start('google_ingest');
       await googleRepo.upsertCampaigns(parsed.campaigns);
       await googleRepo.upsertSpend(parsed.spend);
       await syncRuns.finish(runId, { status: 'ok', rows: parsed.spend.length });
       res.json({ ok: true, rows: parsed.spend.length });
     } catch (err) {
       log.error('[ingest google]', err);
-      await syncRuns.finish(runId, { status: 'error', error: err.message });
+      // nunca dejar escapar una promesa rechazada: tiraría el proceso entero
+      if (runId !== null) await syncRuns.finish(runId, { status: 'error', error: err.message }).catch(() => {});
       res.status(500).json({ error: 'no se pudo guardar' });
     }
   });

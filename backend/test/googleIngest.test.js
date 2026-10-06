@@ -19,6 +19,10 @@ describe('parseGooglePayload', () => {
       campaign_id: '11472612872', date: '2026-10-05', spend: 1234.57, impressions: 1000, clicks: 50, conversions: 3.5, conversions_value: 210000,
     });
   });
+  it('acepta conversiones negativas (ajustes de Google) pero no costo negativo', () => {
+    const r = parseGooglePayload(payload({ rows: [{ ...payload().rows[0], conversions: -1, conversions_value: -5000 }] })).spend[0];
+    expect(r).toMatchObject({ conversions: -1, conversions_value: -5000 });
+  });
   it('rechaza ids, fechas o números inválidos', () => {
     expect(() => parseGooglePayload({})).toThrow(/payload/);
     expect(() => parseGooglePayload(payload({ rows: [{ ...payload().rows[0], campaign_id: 'x' }] }))).toThrow(/campaign_id/);
@@ -59,5 +63,11 @@ describe('POST /ingest/google', () => {
   it('acepta payloads grandes (más de 100 KB)', async () => {
     const rows = Array.from({ length: 2000 }, (_, i) => ({ ...payload().rows[0], date: `2026-${String(1 + (i % 9)).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}`, campaign_id: String(1000000 + i) }));
     expect((await post(payload({ rows }))).status).toBe(200);
+  });
+  it('un error de la base devuelve 500 sin tirar el proceso', async () => {
+    const broken = { start: async () => { throw new Error('db caída'); }, finish: async () => {} };
+    const app2 = createApp({ ingestRouter: createIngestRouter({ token: 'secreto', googleRepo: createGoogleRepo(db), syncRuns: broken, log: { error: () => {} } }) });
+    const res = await request(app2).post('/ingest/google').set('x-ingest-token', 'secreto').send(payload());
+    expect(res.status).toBe(500);
   });
 });
