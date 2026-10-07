@@ -136,3 +136,9 @@ table.simple th:first-child, table.simple td:first-child { text-align: left; }
 .channel-icon { flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--tag); background: color-mix(in srgb, var(--tag) 12%, white); }
 .thumb-sm { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; background: var(--soft); }
 .row-btn { display: flex; align-items: center; gap: 10px; }
+
+/* Fila de canales del pedido: encendidos los que participaron */
+.channel-trail { flex: none; display: grid; grid-template-columns: repeat(3, 20px); gap: 3px; }
+.trail-icon { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: #c9c9c6; background: #f1f1ef; }
+.trail-icon.lit { color: var(--tag); background: color-mix(in srgb, var(--tag) 16%, white); }
+.bought { font-weight: 600; color: var(--text); }

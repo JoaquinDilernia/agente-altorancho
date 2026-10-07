@@ -52,7 +52,10 @@ describe('Ventas', () => {
     expect(within(link).getByText('Anuncio 1')).toBeInTheDocument();
     expect(within(link).getByText('Mariana Francia')).toBeInTheDocument();
     expect(within(link).getByText('3 productos')).toBeInTheDocument();
-    expect(within(link).getByRole('img', { name: 'Meta' })).toBeInTheDocument();
+    expect(within(link).getByText('Compró por Meta')).toBeInTheDocument();
+    expect(within(link).getByRole('img', { name: 'Meta: participó' })).toBeInTheDocument();
+    expect(within(link).getByRole('img', { name: 'Google: no participó' })).toBeInTheDocument();
+    expect(within(link).getByRole('img', { name: 'Orgánica: no participó' })).toBeInTheDocument();
     const second = screen.getByRole('link', { name: /#59002/ });
     expect(within(second).getByText('Pendiente')).toBeInTheDocument();
     expect(within(second).getByText('Campaña 11472612872')).toBeInTheDocument();
@@ -104,5 +107,14 @@ describe('Ventas', () => {
     expect(await screen.findByText('Gasto Google')).toBeInTheDocument();
     expect(screen.getByText('4,5x')).toBeInTheDocument();
     expect(screen.getByText(/google dice 15,0x/i)).toBeInTheDocument();
+  });
+  it('enciende también el canal por el que conoció la tienda (cuando hay dato)', async () => {
+    const api = { get: vi.fn(async (path) => (path.startsWith('/summary') ? SUMMARY
+      : { items: [order(7, { channel: 'email', ad_name: null, first_channel: 'google' })], nextCursor: null })) };
+    render(<MemoryRouter><Ventas api={api} period={PERIOD} setPeriod={vi.fn()} /></MemoryRouter>);
+    const link = await screen.findByRole('link', { name: /#59007/ });
+    expect(within(link).getByText('Compró por Email')).toBeInTheDocument();
+    expect(within(link).getByRole('img', { name: 'Google: participó' })).toBeInTheDocument();
+    expect(within(link).getByRole('img', { name: 'Email: participó' })).toBeInTheDocument();
   });
 });

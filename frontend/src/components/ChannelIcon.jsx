@@ -30,11 +30,32 @@ const PATHS = {
   ),
 };
 
-export default function ChannelIcon({ channel, size = 22 }) {
+export default function ChannelIcon({ channel, size = 22, label, className = 'channel-icon' }) {
   const c = CHANNELS[channel] || CHANNELS.unknown;
+  const text = label || c.label;
   return (
-    <span className="channel-icon" style={{ '--tag': c.color }} role="img" aria-label={c.label} title={c.label}>
+    <span className={className} style={{ '--tag': c.color }} role="img" aria-label={text} title={text}>
       <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{PATHS[channel] || PATHS.unknown}</svg>
+    </span>
+  );
+}
+
+// Fila con todos los canales: encendidos los que participaron de la compra (canal de compra y, con GA4,
+// el canal por el que conoció la tienda), apagados el resto.
+const TRAIL = ['meta', 'google', 'email', 'social_organic', 'organic'];
+
+export function ChannelTrail({ active = [] }) {
+  const on = new Set(active.filter(Boolean));
+  return (
+    <span className="channel-trail">
+      {TRAIL.map((ch) => {
+        const lit = on.has(ch);
+        const name = (CHANNELS[ch] || CHANNELS.unknown).label;
+        return (
+          <ChannelIcon key={ch} channel={ch} size={14} className={lit ? 'trail-icon lit' : 'trail-icon'}
+            label={`${name}: ${lit ? 'participó' : 'no participó'}`} />
+        );
+      })}
     </span>
   );
 }

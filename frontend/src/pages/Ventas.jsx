@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import PeriodPicker from '../components/PeriodPicker.jsx';
 import ChannelTag, { CHANNELS } from '../components/ChannelTag.jsx';
-import ChannelIcon from '../components/ChannelIcon.jsx';
+import { ChannelTrail } from '../components/ChannelIcon.jsx';
 import { usePolling } from '../hooks/usePolling.js';
 import { fmtMoney, fmtNumber, fmtRoas, fmtPct, fmtRelative } from '../lib/format.js';
 import { periodQuery } from '../lib/period.js';
@@ -102,11 +102,12 @@ function OrderRow({ o, api }) {
     <li className="order">
       <div className="order-row">
         <Link className="order-link" to={`/orden/${o.id}`}>
-          <ChannelIcon channel={o.channel} />
+          <ChannelTrail active={[o.channel, o.first_channel]} />
           <div className="row-main">
             <div className="row-title"><span className="order-num">#{o.number}</span> <span>{o.customer_name || 'Sin nombre'}</span></div>
             <div className="row-sub">
-              <span>{origin || (CHANNELS[o.channel] || CHANNELS.unknown).label}</span>
+              <span className="bought">Compró por {(CHANNELS[o.channel] || CHANNELS.unknown).label}</span>
+              {origin && <span>{origin}</span>}
               <span aria-hidden="true">·</span>
               <span>{count === 1 ? '1 producto' : `${count} productos`}</span>
             </div>
