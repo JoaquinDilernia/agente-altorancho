@@ -14,7 +14,7 @@ function setup({ missing = [{ id: '111', name: 'Ad sin params', status: 'ACTIVE'
   const api = {
     get: vi.fn(async (path) => {
       if (path === '/ads/missing-params') return missing;
-      if (path.includes('level=campaign')) return { level: 'campaign', rows: [row('C1'), row('C2', { sales: 0, revenue: 0, costPerSale: null, roas: 0, noSales: true })], unidentified: { orders: 2, revenue: 1500 } };
+      if (path.includes('level=campaign')) return { level: 'campaign', rows: [row('C1', { thumbnail_url: 'https://t/c1.jpg' }), row('C2', { sales: 0, revenue: 0, costPerSale: null, roas: 0, noSales: true })], unidentified: { orders: 2, revenue: 1500 } };
       if (path.includes('level=adset')) return { level: 'adset', rows: [row('S1')], unidentified: null };
       return { level: 'ad', rows: [row('A1')], unidentified: null };
     }),
@@ -83,5 +83,10 @@ describe('Anuncios', () => {
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/ads?from=2026-09-29&to=2026-10-05&level=campaign&sort=spend&platform=google'));
     expect(await screen.findAllByText(/google dice/i)).not.toHaveLength(0);
     expect(screen.queryByText(/parámetros de url/i)).not.toBeInTheDocument();
+  });
+  it('muestra la foto del anuncio en el listado', async () => {
+    setup();
+    const c1 = await screen.findByRole('button', { name: /nombre c1/i });
+    expect(within(c1).getByRole('img', { name: /nombre c1/i })).toHaveAttribute('src', 'https://t/c1.jpg');
   });
 });

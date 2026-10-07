@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import PeriodPicker from '../components/PeriodPicker.jsx';
 import ChannelTag, { CHANNELS } from '../components/ChannelTag.jsx';
+import ChannelIcon from '../components/ChannelIcon.jsx';
 import { usePolling } from '../hooks/usePolling.js';
-import { fmtMoney, fmtNumber, fmtRoas, fmtPct, fmtRelative, shortName } from '../lib/format.js';
+import { fmtMoney, fmtNumber, fmtRoas, fmtPct, fmtRelative } from '../lib/format.js';
 import { periodQuery } from '../lib/period.js';
 
 export const PAYMENT_LABEL = {
@@ -85,24 +86,61 @@ function Summary({ s, channel, onChannel }) {
   );
 }
 
-function OrderRow({ o }) {
+function OrderRow({ o, api }) {
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [detailError, setDetailError] = useState(null);
   const origin = originText(o);
   const status = o.cancelled ? 'Cancelada' : o.payment_status !== 'paid' ? PAYMENT_LABEL[o.payment_status] || o.payment_status : null;
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !detail) api.get(`/orders/${o.id}`).then(setDetail).catch((e) => setDetailError(e.message));
+  };
+  const count = o.items_count ?? 0;
   return (
-    <li>
-      <Link className="row" to={`/orden/${o.id}`}>
-        <div className="row-main">
-          <div className="row-title">#{o.number} · {shortName(o.customer_name)}</div>
-          <div className="row-sub">
-            <ChannelTag channel={o.channel} />
-            {origin && <span>{origin}</span>}
+    <li className="order">
+      <div className="order-row">
+        <Link className="order-link" to={`/orden/${o.id}`}>
+          <ChannelIcon channel={o.channel} />
+          <div className="row-main">
+            <div className="row-title"><span className="order-num">#{o.number}</span> <span>{o.customer_name || 'Sin nombre'}</span></div>
+            <div className="row-sub">
+              <span>{origin || (CHANNELS[o.channel] || CHANNELS.unknown).label}</span>
+              <span aria-hidden="true">·</span>
+              <span>{count === 1 ? '1 producto' : `${count} productos`}</span>
+            </div>
           </div>
+          <div className="row-side">
+            <div className="row-amount">{fmtMoney(o.total)}</div>
+            <div className="row-sub">{status ? <span className="badge warn">{status}</span> : fmtRelative(o.created_at)}</div>
+          </div>
+        </Link>
+        <button type="button" className="expand" aria-expanded={open} aria-label={`Ver productos de #${o.number}`} onClick={toggle}>
+          {open ? '▴' : '▾'}
+        </button>
+      </div>
+      {open && (
+        <div className="order-extra">
+          {detailError && <p className="error">{detailError}</p>}
+          {!detail && !detailError && <p className="muted">Cargando…</p>}
+          {detail && (
+            <>
+              <ul className="items">
+                {detail.items.map((it, i) => (
+                  <li key={i}><span>{it.quantity} × {it.name}</span><span>{fmtMoney(it.price * it.quantity)}</span></li>
+                ))}
+              </ul>
+              <dl className="kv">
+                <dt>Medio de pago</dt><dd>{detail.gateway_name || '—'}</dd>
+                <dt>Envío</dt><dd>{fmtMoney(detail.shipping_cost_customer)}</dd>
+                <dt>Entró por</dt><dd style={{ overflowWrap: 'anywhere' }}>{detail.visit_landing_page || detail.landing_url || 'Sin datos'}</dd>
+              </dl>
+              <Link className="note" to={`/orden/${o.id}`}>Ver detalle completo →</Link>
+            </>
+          )}
         </div>
-        <div className="row-side">
-          <div className="row-amount">{fmtMoney(o.total)}</div>
-          <div className="row-sub">{status ? <span className="badge warn">{status}</span> : fmtRelative(o.created_at)}</div>
-        </div>
-      </Link>
+      )}
     </li>
   );
 }
@@ -165,8 +203,8 @@ export default function Ventas({ api, period, setPeriod }) {
           <button type="button" className="chip active" onClick={() => setChannel('')}>{CHANNELS[channel]?.label} ✕</button>
         </div>
       )}
-      <ul className="list">
-        {list.items.map((o) => <OrderRow key={o.id} o={o} />)}
+      <ul className="orders">
+        {list.items.map((o) => <OrderRow key={o.id} o={o} api={api} />)}
       </ul>
       {list.error && <p className="error">{list.error}</p>}
       {!list.loading && list.items.length === 0 && !list.error && <p className="muted">No hay órdenes en este período.</p>}

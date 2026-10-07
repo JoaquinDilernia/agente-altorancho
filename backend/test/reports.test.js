@@ -155,3 +155,18 @@ describe('adDetail / estado', () => {
     expect(await reports.counts()).toEqual({ orders: 7, adsMissingParams: 3 });
   });
 });
+
+describe('mejoras de listado', () => {
+  it('listOrders trae la cantidad total de productos', async () => {
+    const { items } = await reports.listOrders({ ...DAY, q: '2' });
+    expect(items[0]).toMatchObject({ id: '2', items_count: 1 });
+  });
+  it('campañas y conjuntos muestran la miniatura del anuncio que más gastó', async () => {
+    await db.query("UPDATE meta_ads SET thumbnail_url = 'https://t/1.jpg' WHERE id = '1000001'");
+    await db.query("UPDATE meta_ads SET thumbnail_url = 'https://t/2.jpg' WHERE id = '1000002'");
+    const camp = await reports.adsRanking({ ...DAY, level: 'campaign' });
+    expect(camp.rows[0].thumbnail_url).toBe('https://t/2.jpg'); // 1000002 gastó 600 vs 400
+    const adset = await reports.adsRanking({ ...DAY, level: 'adset' });
+    expect(adset.rows[0].thumbnail_url).toBe('https://t/2.jpg');
+  });
+});

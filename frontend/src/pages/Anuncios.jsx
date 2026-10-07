@@ -154,6 +154,7 @@ export default function Anuncios({ api, period, setPeriod }) {
             {data.rows.map((r) => (
               <li key={r.id}>
                 <button type="button" className={`row row-btn${r.noSales ? ' no-sales' : ''}`} onClick={() => open(r)}>
+                  {r.thumbnail_url && <img className="thumb-sm" src={r.thumbnail_url} alt={r.name || r.id} loading="lazy" />}
                   <div className="row-main">
                     <div className="row-title">{r.name || `ID ${r.id}`}</div>
                     <div className="row-sub">

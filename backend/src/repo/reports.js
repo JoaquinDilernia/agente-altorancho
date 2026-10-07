@@ -73,6 +73,14 @@ export function createReportsRepo(db) {
     if (platform === 'google') return googleRanking({ from, to, sort });
     const key = KEY[level];
     if (!key) throw badRequest('level inválido');
+    // en campañas/conjuntos: miniatura del anuncio que más gastó en el período
+    const childCol = { campaign: 'campaign_id', adset: 'parent_id' }[level];
+    const thumbSql = childCol
+      ? `COALESCE(m.thumbnail_url, (SELECT ad.thumbnail_url FROM meta_ads ad
+           LEFT JOIN meta_spend_daily sd ON sd.ad_id = ad.id AND sd.date BETWEEN $1::date AND $2::date
+          WHERE ad.level = 'ad' AND ad.thumbnail_url IS NOT NULL AND ad.${childCol} = COALESCE(sp.id, sa.id)
+          GROUP BY ad.id, ad.thumbnail_url ORDER BY COALESCE(sum(sd.spend), 0) DESC, ad.id LIMIT 1))`
+      : 'm.thumbnail_url';
     const params = [from, to];
     let spendParent = '';
     let salesParent = '';
@@ -93,7 +101,7 @@ export function createReportsRepo(db) {
            FROM orders o JOIN order_attribution a ON a.order_id = o.id
           WHERE a.channel = 'meta' AND a.${key} IS NOT NULL AND ${PAID} AND ${RANGE(1, 2)} ${salesParent}
           GROUP BY 1)
-       SELECT COALESCE(sp.id, sa.id) AS id, m.name, m.status, m.thumbnail_url,
+       SELECT COALESCE(sp.id, sa.id) AS id, m.name, m.status, ${thumbSql} AS thumbnail_url,
               COALESCE(sp.s, 0)::float8 AS spend, COALESCE(sp.imp, 0)::int AS impressions, COALESCE(sp.clk, 0)::int AS clicks,
               COALESCE(sp.mp, 0)::float8 AS meta_purchases, COALESCE(sp.mv, 0)::float8 AS meta_value,
               COALESCE(sa.n, 0)::int AS sales, COALESCE(sa.rev, 0)::float8 AS revenue
@@ -205,6 +213,7 @@ export function createReportsRepo(db) {
       const { rows } = await db.query(
         `SELECT o.id::text AS id, o.number, o.created_at, o.total::float8 AS total, o.status, o.payment_status,
                 o.cancelled_at IS NOT NULL AS cancelled, o.customer_name,
+                (SELECT COALESCE(sum(it.quantity), 0) FROM order_items it WHERE it.order_id = o.id)::int AS items_count,
                 COALESCE(a.channel, 'unknown') AS channel, a.confidence, a.ad_id, a.campaign_id,
                 COALESCE(c.name, gc.name, a.campaign_name) AS campaign_name, ad.name AS ad_name
            FROM orders o

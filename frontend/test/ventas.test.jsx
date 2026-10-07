@@ -14,8 +14,12 @@ const SUMMARY = {
 };
 const order = (id, extra = {}) => ({
   id: String(id), number: 59000 + id, created_at: new Date().toISOString(), total: 1000, status: 'open', payment_status: 'paid',
-  cancelled: false, customer_name: 'Mariana Francia', channel: 'meta', confidence: 'ad', ad_name: `Anuncio ${id}`, campaign_name: 'Camp', campaign_id: '1', ...extra,
+  cancelled: false, customer_name: 'Mariana Francia', items_count: 3, channel: 'meta', confidence: 'ad', ad_name: `Anuncio ${id}`, campaign_name: 'Camp', campaign_id: '1', ...extra,
 });
+const DETAIL = {
+  id: '1', number: 59001, gateway_name: 'Pago Nube', shipping_cost_customer: 500, visit_landing_page: 'https://altorancho.com/?utm_source=meta',
+  items: [{ name: 'Lámpara Fungi', sku: 'IME040', quantity: 2, price: 39990 }],
+};
 const PAGE1 = { items: [order(1), order(2, { payment_status: 'pending', channel: 'google', ad_name: null, campaign_id: '11472612872' })], nextCursor: 'C1' };
 const PAGE2 = { items: [order(3, { channel: 'organic', ad_name: null })], nextCursor: null };
 
@@ -23,6 +27,7 @@ function setup() {
   const api = {
     get: vi.fn(async (path) => {
       if (path.startsWith('/summary')) return SUMMARY;
+      if (/^\/orders\/\d+$/.test(path)) return DETAIL;
       if (path.includes('cursor=C1')) return PAGE2;
       return PAGE1;
     }),
@@ -45,10 +50,20 @@ describe('Ventas', () => {
     const link = await screen.findByRole('link', { name: /#59001/ });
     expect(link).toHaveAttribute('href', '/orden/1');
     expect(within(link).getByText('Anuncio 1')).toBeInTheDocument();
-    expect(within(link).getByText('Mariana F.', { exact: false })).toBeInTheDocument();
+    expect(within(link).getByText('Mariana Francia')).toBeInTheDocument();
+    expect(within(link).getByText('3 productos')).toBeInTheDocument();
+    expect(within(link).getByRole('img', { name: 'Meta' })).toBeInTheDocument();
     const second = screen.getByRole('link', { name: /#59002/ });
     expect(within(second).getByText('Pendiente')).toBeInTheDocument();
     expect(within(second).getByText('Campaña 11472612872')).toBeInTheDocument();
+  });
+  it('el desplegable muestra productos, pago y envío', async () => {
+    const api = setup();
+    await userEvent.click(await screen.findByRole('button', { name: /ver productos de #59001/i }));
+    expect(api.get).toHaveBeenCalledWith('/orders/1');
+    expect(await screen.findByText(/lámpara fungi/i)).toBeInTheDocument();
+    expect(screen.getByText(/pago nube/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /ver detalle completo/i })).toHaveAttribute('href', '/orden/1');
   });
   it('"Ver más" trae la página siguiente', async () => {
     setup();

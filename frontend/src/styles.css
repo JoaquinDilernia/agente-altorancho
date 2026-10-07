@@ -122,3 +122,17 @@ table.simple th:first-child, table.simple td:first-child { text-align: left; }
 .brand { display: flex; align-items: center; gap: 6px; }
 .brand-logo { height: 18px; width: auto; display: block; }
 .login-card .brand-logo { height: 26px; }
+
+/* Tabla de pedidos estilo Tienda Nube: filas alternadas, ícono de canal y desplegable */
+.orders { list-style: none; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.orders > li:nth-child(even) { background: #F6F6F5; }
+.order-row { display: flex; align-items: center; }
+.order-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 4px 12px 12px; }
+.order-num { color: var(--muted); font-weight: 500; }
+.expand { flex: none; width: 40px; height: 40px; margin-right: 6px; border: 0; background: none; color: var(--muted); font-size: 16px; }
+.order-extra { padding: 4px 16px 14px 52px; font-size: 13px; }
+.order-extra .items { list-style: none; margin-bottom: 8px; }
+.order-extra .items li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.channel-icon { flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--tag); background: color-mix(in srgb, var(--tag) 12%, white); }
+.thumb-sm { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; background: var(--soft); }
+.row-btn { display: flex; align-items: center; gap: 10px; }
