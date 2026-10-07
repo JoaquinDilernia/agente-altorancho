@@ -42,7 +42,7 @@ beforeAll(async () => {
     tn({ id: 4, at: '2026-10-05T16:00:00+0000', total: 900, payment: 'pending', landing: metaAd('1000001') }),
     tn({ id: 5, at: '2026-10-05T17:00:00+0000', total: 800, cancelled: '2026-10-05T20:00:00+0000', landing: metaAd('1000001') }),
     tn({ id: 6, at: '2026-10-05T18:00:00+0000', total: 2000, landing: metaAd('1000003'), item: 'Silla Nórdica' }),
-    tn({ id: 7, at: '2026-10-05T19:00:00+0000', total: 700, landing: 'https://altorancho.com/?fbclid=X' }),
+    tn({ id: 7, at: '2026-10-05T19:00:00+0000', total: 700, landing: 'https://altorancho.com/?utm_source=meta&utm_medium=cpc' }), // Meta sin identificar
   ];
   for (const o of seed) {
     const m = mapOrder(o);

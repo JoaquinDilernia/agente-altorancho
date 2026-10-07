@@ -21,8 +21,9 @@ describe('attribute — Meta', () => {
     const r = attribute(v('https://altorancho.com/productos/x/?utm_source=meta&utm_medium=cpc&utm_campaign=altorancho_conversiones_dpa_aon&utm_content=altorancho_conversiones_dpa_postevento&fbclid=PAZX'));
     expect(r).toMatchObject({ channel: 'meta', confidence: 'campaign', ad_id: null });
   });
-  it('fbclid solo, sin UTMs → Meta sin identificar', () => {
-    expect(attribute(v('https://altorancho.com/?fbclid=PAZX'))).toMatchObject({ channel: 'meta', confidence: 'none' });
+  it('fbclid solo, sin UTMs → redes orgánicas (FB/IG agregan fbclid a cualquier link: bio, posteos, historias)', () => {
+    expect(attribute(v('https://altorancho.com/?fbclid=PAZX'))).toMatchObject({ channel: 'social_organic', confidence: 'none' });
+    expect(attribute(v('https://altorancho.com/?fbclid=PAZX&gclid=G1')).channel).toBe('google');
   });
   it('source facebook + medium paid también es Meta', () => {
     expect(attribute(v('https://altorancho.com/?utm_source=facebook&utm_medium=paid&utm_campaign=x')).channel).toBe('meta');

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { RULES_VERSION } from '../src/engine/attribution.js';
 import { createTestDb } from './helpers/testDb.js';
 import { createOrdersRepo } from '../src/repo/orders.js';
 import { createJobCatalog } from '../src/jobsCatalog.js';
@@ -48,7 +49,7 @@ describe('jobCatalog', () => {
       const n = await createJobCatalog({ orderSync: {}, metaSync: {}, ordersRepo, syncRuns: {}, now: () => NOW }).reattribute.fn(c);
       expect(n).toBe(2);
       const { rows } = await db.query('SELECT channel, rules_version FROM order_attribution ORDER BY order_id');
-      expect(rows).toEqual([{ channel: 'google', rules_version: 1 }, { channel: 'google', rules_version: 1 }]);
+      expect(rows).toEqual([{ channel: 'google', rules_version: RULES_VERSION }, { channel: 'google', rules_version: RULES_VERSION }]);
     });
   });
 });

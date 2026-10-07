@@ -1,6 +1,6 @@
 // Reglas de atribución de una orden de Tienda Nube a partir de su customer_visit.
 // Puro: no toca la DB. Los IDs faltantes se completan después con ordersRepo.resolveMetaIds().
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 const META_SOURCES = new Set(['meta', 'facebook', 'fb', 'instagram', 'ig']);
 const PAID_MEDIUMS = new Set(['cpc', 'paid', 'paid_social', 'paidsocial', 'ads']);
@@ -47,8 +47,7 @@ export function attribute(visit) {
   const med = (p.utm_medium || '').toLowerCase();
 
   const isMeta = (META_SOURCES.has(src) && PAID_MEDIUMS.has(med))
-    || (p.fbclid && p.utm_campaign && !SOCIAL_MEDIUMS.has(med) && med !== 'email')
-    || (p.fbclid && !src && !med);
+    || (p.fbclid && p.utm_campaign && !SOCIAL_MEDIUMS.has(med) && med !== 'email');
   if (isMeta) {
     const ad_id = numericId(p.utm_content);
     const adset_id = numericId(p.utm_term);
@@ -62,7 +61,8 @@ export function attribute(visit) {
     return result('google', campaign_id ? 'campaign' : 'none', { campaign_id, campaign_name: p.utm_campaign || null });
   }
   if (med === 'email') return result('email', 'none', { campaign_name: p.utm_campaign || null });
-  if (SOCIAL_MEDIUMS.has(med) || META_SOURCES.has(src)) return result('social_organic');
+  // fbclid sin UTMs: FB/IG lo agregan a cualquier link (bio, posteos, historias), no prueba un anuncio
+  if (SOCIAL_MEDIUMS.has(med) || META_SOURCES.has(src) || (p.fbclid && !src && !med)) return result('social_organic');
   if (src) return result('other', 'none', { campaign_name: p.utm_campaign || null });
   return hasVisit ? result('organic') : result('unknown');
 }
