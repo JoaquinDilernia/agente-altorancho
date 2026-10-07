@@ -54,6 +54,15 @@ describe('POST /ingest/google', () => {
     expect((await request(app).post('/ingest/google').send(payload())).status).toBe(401);
     expect((await post(payload(), 'otro')).status).toBe(401);
   });
+  it('los rechazos quedan registrados como error (sin el token) para verlos en Estado', async () => {
+    await post(payload(), 'otro');
+    await post({ rows: 'x' });
+    const { rows } = await db.query(`SELECT status, error FROM sync_runs WHERE source = 'google_ingest' ORDER BY id`);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ status: 'error', error: expect.stringMatching(/token/) });
+    expect(rows[0].error).not.toMatch(/otro/);
+    expect(rows[1]).toMatchObject({ status: 'error', error: expect.stringMatching(/payload|rows/) });
+  });
   it('payload inválido → 400 y no guarda nada', async () => {
     expect((await post({ rows: 'x' })).status).toBe(400);
     const { rows } = await db.query('SELECT count(*)::int AS n FROM google_spend_daily');
