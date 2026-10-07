@@ -11,6 +11,8 @@ const SOURCES = [
   ['meta_url_tags', 'Parámetros de URL'],
   ['reattribute', 'Re-atribución'],
   ['google_ingest', 'Google — gasto'],
+  ['ga4', 'Google Analytics — recorrido'],
+  ['ga4_backfill', 'Google Analytics — histórico'],
 ];
 const LABEL = Object.fromEntries(SOURCES);
 

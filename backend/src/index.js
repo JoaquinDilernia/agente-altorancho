@@ -27,6 +27,9 @@ import { createExecutor } from './agent/executor.js';
 import { createOutcomeMeter } from './agent/outcomes.js';
 import { createAgentRouter } from './routes/agent.js';
 import { createGoogleRepo } from './repo/google.js';
+import { createGa4Client } from './services/ga4.js';
+import { createGa4Repo } from './repo/ga4.js';
+import { createGa4Sync } from './sync/ga4.js';
 import { createIngestRouter } from './routes/ingest.js';
 import { createApp } from './app.js';
 import { createWebhookRouter } from './routes/webhooks.js';
@@ -55,7 +58,11 @@ const orderSync = createOrderSync({ tn, ordersRepo });
 const metaSync = createMetaSync({ meta, metaRepo, ordersRepo });
 const urlTagger = createUrlTagger({ meta, metaRepo });
 const jobs = createJobRunner({ syncRuns });
-const jobCatalog = createJobCatalog({ orderSync, metaSync, ordersRepo, syncRuns });
+// GA4 es opcional: sin la cuenta de servicio no hay job ni cron
+const ga4Sync = process.env.GA4_SERVICE_ACCOUNT && process.env.GA4_PROPERTY_ID
+  ? createGa4Sync({ ga4: createGa4Client({ serviceAccountJson: process.env.GA4_SERVICE_ACCOUNT, propertyId: process.env.GA4_PROPERTY_ID }), ga4Repo: createGa4Repo(db) })
+  : null;
+const jobCatalog = createJobCatalog({ orderSync, metaSync, ga4Sync, ordersRepo, syncRuns });
 const runJob = (name) => jobs.run(jobCatalog[name].source, jobCatalog[name].fn);
 
 const configRepo = createAgentConfigRepo(db);
@@ -119,6 +126,8 @@ cron.schedule('0 8 * * *', async () => {
   await runner.run({ trigger: 'cron' }).catch(() => {});
 }, TZ);
 // Resultados de lo ejecutado (09:00 ART) y vencimiento de pendientes (cada hora)
+// GA4 procesa con demora: cada hora se re-trae los últimos 3 días
+if (ga4Sync) cron.schedule('40 * * * *', () => runJob('ga4'), TZ);
 cron.schedule('0 9 * * *', () => meter.measure().catch((e) => console.error('[agente] medición falló:', e)), TZ);
 cron.schedule('30 * * * *', () => executor.expire().catch((e) => console.error('[agente] vencimiento falló:', e)), TZ);
 

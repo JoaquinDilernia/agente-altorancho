@@ -4,7 +4,7 @@ import { isYmd } from '../engine/dates.js';
 const CHANNELS = new Set(['meta', 'google', 'organic', 'email', 'social_organic', 'other', 'unknown']);
 const LEVELS = new Set(['campaign', 'adset', 'ad']);
 const SORTS = new Set(['spend', 'cps', 'roas']);
-const SOURCES = ['tn_backfill', 'tn_incremental', 'tn_webhook', 'meta_catalog', 'meta_spend', 'meta_backfill', 'meta_url_tags', 'reattribute', 'google_ingest'];
+const SOURCES = ['tn_backfill', 'tn_incremental', 'tn_webhook', 'meta_catalog', 'meta_spend', 'meta_backfill', 'meta_url_tags', 'reattribute', 'google_ingest', 'ga4', 'ga4_backfill'];
 const MAX_DAYS = 366;
 
 const badRequest = (msg) => Object.assign(new Error(msg), { status: 400 });

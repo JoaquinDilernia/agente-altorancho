@@ -215,12 +215,14 @@ export function createReportsRepo(db) {
                 o.cancelled_at IS NOT NULL AS cancelled, o.customer_name,
                 (SELECT COALESCE(sum(it.quantity), 0) FROM order_items it WHERE it.order_id = o.id)::int AS items_count,
                 COALESCE(a.channel, 'unknown') AS channel, a.confidence, a.ad_id, a.campaign_id,
-                COALESCE(c.name, gc.name, a.campaign_name) AS campaign_name, ad.name AS ad_name
+                COALESCE(c.name, gc.name, a.campaign_name) AS campaign_name, ad.name AS ad_name, g4.first_channel
            FROM orders o
            LEFT JOIN order_attribution a ON a.order_id = o.id
            LEFT JOIN meta_ads c ON c.id = a.campaign_id
            LEFT JOIN google_campaigns gc ON gc.id = a.campaign_id AND a.channel = 'google'
            LEFT JOIN meta_ads ad ON ad.id = a.ad_id
+           LEFT JOIN LATERAL (SELECT g.first_channel, g.first_source, g.first_medium, g.session_group FROM ga4_transactions g
+                       WHERE g.transaction_id IN (o.number::text, o.id::text) LIMIT 1) g4 ON true
           WHERE ${where.join(' AND ')}
           ORDER BY o.created_at DESC, o.id DESC
           LIMIT $${params.length}`,
@@ -238,13 +240,16 @@ export function createReportsRepo(db) {
                 o.shipping_cost_customer::float8 AS shipping_cost_customer, o.currency, o.gateway_name, o.storefront,
                 o.customer_name, o.customer_email, o.landing_url, o.visit_landing_page, o.visit_created_at,
                 COALESCE(a.channel, 'unknown') AS channel, a.confidence, a.ad_id, a.adset_id, a.campaign_id, a.source_raw,
-                COALESCE(c.name, gc.name, a.campaign_name) AS campaign_name, ad.name AS ad_name, ad.thumbnail_url, s.name AS adset_name
+                COALESCE(c.name, gc.name, a.campaign_name) AS campaign_name, ad.name AS ad_name, ad.thumbnail_url, s.name AS adset_name,
+                g4.first_channel, g4.first_source, g4.first_medium, g4.session_group
            FROM orders o
            LEFT JOIN order_attribution a ON a.order_id = o.id
            LEFT JOIN meta_ads ad ON ad.id = a.ad_id
            LEFT JOIN meta_ads s ON s.id = a.adset_id
            LEFT JOIN meta_ads c ON c.id = a.campaign_id
            LEFT JOIN google_campaigns gc ON gc.id = a.campaign_id AND a.channel = 'google'
+           LEFT JOIN LATERAL (SELECT g.first_channel, g.first_source, g.first_medium, g.session_group FROM ga4_transactions g
+                       WHERE g.transaction_id IN (o.number::text, o.id::text) LIMIT 1) g4 ON true
           WHERE o.id = $1::bigint`,
         [id],
       );

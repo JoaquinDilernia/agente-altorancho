@@ -43,6 +43,12 @@ export default function OrderDetail({ api }) {
           )}
           {o.channel === 'google' && <p style={{ marginTop: 8 }}>Campaña de Google: {o.campaign_name || o.campaign_id || 'sin identificar'}</p>}
           {o.channel === 'email' && o.campaign_name && <p style={{ marginTop: 8 }}>{o.campaign_name}</p>}
+          {o.first_channel && (
+            <p style={{ marginTop: 8 }}>
+              Primer contacto (Google Analytics): <ChannelTag channel={o.first_channel} />
+              {o.first_source && <span className="muted"> {o.first_source}{o.first_medium ? ` / ${o.first_medium}` : ''}</span>}
+            </p>
+          )}
           {paidChannel && <p className="note">{CONFIDENCE_TEXT[o.confidence]}</p>}
         </div>
       </div>
