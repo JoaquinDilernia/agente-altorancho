@@ -1,147 +1,147 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Agente from '../src/pages/Agente.jsx';
 
-const m7 = { spend: 210000, sales: 0, revenue: 0, roas: null, cpa: null, metaPurchases: 1, metaValue: 50000 };
-const pause = {
-  id: 1, type: 'pause', status: 'pending', level: 'ad', object_id: 'A', object_name: 'Anuncio sillas', title: 'Pausar Anuncio sillas: gastó $210.000 sin ventas',
-  reasoning: 'Lleva 7 días sin ventas reales.', expected_impact: 'Ahorra ~$30.000 por día', confidence: 'alta', dudoso_atribucion: false,
-  current_value: { status: 'ACTIVE' }, proposed_value: { status: 'PAUSED' }, snapshot: { m7 }, created_at: '2026-10-06T11:00:00Z',
-};
-const budget = {
-  ...pause, id: 2, type: 'budget', object_id: 'G', object_name: 'Campaña DPA', title: 'Subir Campaña DPA', confidence: 'media',
-  current_value: { daily_budget: 50000 }, proposed_value: { daily_budget: 60000 }, snapshot: { m7: { ...m7, sales: 9, revenue: 900000, roas: 4.3 } },
-};
-const idea = { ...pause, id: 3, type: 'idea', title: 'Renovar creativo de lámparas', reasoning: 'El CTR cayó 40%.', current_value: null, proposed_value: null };
-const executed = {
-  ...pause, id: 4, status: 'executed', decided_at: '2026-10-05T12:00:00Z', executed_at: '2026-10-05T12:00:00Z',
-  undo_until: new Date(Date.now() + 3600e3).toISOString(), verdict: 'mejoro', outcome: { d3: { change: 0.25, verdict: 'mejoro' } },
+const real = (o = {}) => ({ spend: 9000, sales: 2, revenue: 60000, roas: 6.7, costPerSale: 4500, metaPurchases: 3, ...o });
+const snapshot = {
+  today: '2026-10-16', spendToday: 1500,
+  month: { spend: 120000, metaPurchases: 10, metaValue: 500000 },
+  last7d: { orders: 10, revenue: 300000, meta: { spend: 9000, sales: 2, revenue: 60000, roas: 6.7, metaPurchases: 3 }, byChannel: [] },
+  campaigns: [{ id: '900', name: 'AR | VENTAS', status: 'ACTIVE', effectiveStatus: 'ACTIVE', dailyBudgetArs: 50000, last7d: real() }],
+  adsets: [{ id: '901', name: 'INT_DECO_AMBA', campaignId: '900', status: 'ACTIVE', effectiveStatus: 'ACTIVE', last7d: real(), learningStage: 'LEARNING' }],
+  ads: [{ id: '902', name: 'AD1', adsetId: '901', status: 'ACTIVE', effectiveStatus: 'ACTIVE', last7d: real(), delivery7d: { frequency: 1.8 } }],
 };
 const overview = (o = {}) => ({
-  lastRun: { started_at: '2026-10-06T11:00:00Z', status: 'ok', candidates_count: 14, cost_usd: 0.14 }, running: false, pendingCount: 2,
-  manualRemaining: 2, monthCostUsd: 1.2, monthlyBudgetUsd: 20, agentEnabled: true, executionEnabled: false,
-  precision: [{ type: 'pause', good: 8, total: 10 }], ...o,
+  configured: { meta: true, agent: true }, storeUrl: 'https://altorancho.com',
+  settings: { agent_enabled: true, autonomous: false, monthly_cap_ars: 200000, business_notes: '' },
+  lastRun: { id: 'r1', status: 'done', report: '**Cómo vamos** vendimos 2', finished_at: '2026-10-16T11:00:00Z' },
+  pendingCount: 1, openQuestions: 1, snapshot, metaError: null, ...o,
 });
-const config = {
-  agentEnabled: true, executionEnabled: false, autoByType: { pause: false, reactivate: false, budget: false, shift: false },
-  monthlyBudgetUsd: 20, manualRunsPerDay: 2, expireHours: 48, budget: { maxChangePct: 20, minDaily: 1000, maxDaily: 5000000 },
-  thresholds: { noSalesSpendMultiple: 2, expensiveRoasRatio: 0.5, winnerRoasRatio: 1.5, winnerMinSales: 3 },
+const decision = {
+  id: 'd1', tool: 'propose_budget_change', status: 'pending', title: 'Subir AR | VENTAS', reason: 'ROAS 6,7 con 2 ventas',
+  expected_impact: 'Más ventas', input: { current_budget_ars: 50000, proposed_budget_ars: 60000 }, created_at: '2026-10-16T11:00:00Z',
+};
+const question = { id: 'q1', question: '¿Hay stock de la Nórdica?', why: 'para subir presupuesto', quick_answers: ['Sí', 'No'], created_at: '2026-10-16T11:00:00Z' };
+const creative = {
+  id: 'c1', name: 'Lámpara Nórdica', copy: 'Iluminá tu living', link: 'https://altorancho.com', status: 'unused',
+  feed: { kind: 'image', image_url: 'https://img/1.png' }, story: null,
 };
 
 function setup(over = {}) {
   const api = {
     get: vi.fn(async (path) => {
-      if (path === '/agent/overview') return over.overview || overview();
-      if (path.startsWith('/recommendations?group=pending')) return [pause, budget, idea];
-      if (path.startsWith('/recommendations?group=history')) return [executed];
-      if (path === '/learnings') return [{ id: 9, text: 'Las DPA venden tarde', evidence_ids: [1, 2, 3] }];
-      if (path === '/agent/config') return config;
-      return null;
+      if (path.startsWith('/ads/overview')) return over.overview || overview();
+      if (path === '/ads/questions?status=open') return { questions: over.questions ?? [question] };
+      if (path === '/ads/questions?status=answered') return { questions: [] };
+      if (path === '/ads/decisions') return { decisions: [decision, { ...decision, id: 'd2', status: 'failed', title: 'Pausar AD1', error: 'Meta 100' }] };
+      if (path === '/ads/requests') return { requests: [{ id: 'rq', concept: 'Video del living', style_notes: '9:16', reason: 'falta video' }] };
+      if (path === '/ads/learnings') return { learnings: [] };
+      if (path === '/ads/creatives') return { creatives: [creative] };
+      if (path === '/ads/ig-posts') return { posts: [] };
+      throw new Error(`ruta no simulada ${path}`);
     }),
-    post: vi.fn().mockResolvedValue({ status: 'approved' }),
-    put: vi.fn().mockResolvedValue(config),
-    del: vi.fn().mockResolvedValue({ ok: true }),
+    post: vi.fn(async (path) => {
+      if (path.endsWith('/answer')) return { question: { ...question, status: 'answered' }, run: { id: 'r2' }, note: null };
+      if (path === '/ads/creatives') return { creative: { id: 'new' } };
+      return { ok: true, decision: { ...decision, status: 'executed' } };
+    }),
+    put: vi.fn(async (_p, body) => ({ settings: body })),
+    patch: vi.fn(async () => ({})),
+    del: vi.fn(async () => ({})),
+    upload: vi.fn(async (_p, _f, onProgress) => { onProgress(1); return { media: {} }; }),
   };
   render(<MemoryRouter><Agente api={api} /></MemoryRouter>);
-  return api;
+  return { api, user: userEvent.setup() };
 }
 
-describe('Agente — Pendientes', () => {
-  it('cabecera con último análisis, cupo y aviso de ejecución apagada', async () => {
+beforeEach(() => {
+  localStorage.clear();
+  // jsdom no implementa las URLs de objeto (vista previa del archivo elegido)
+  URL.createObjectURL = vi.fn(() => 'blob:preview');
+  URL.revokeObjectURL = vi.fn();
+});
+
+describe('Agente de pauta', () => {
+  it('resumen: ventas reales, informe, preguntas y campañas', async () => {
     setup();
-    expect(await screen.findByText(/14 candidatos/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /analizar ahora \(te quedan 2\)/i })).toBeEnabled();
-    expect(screen.getByText(/ejecución está apagada/i)).toBeInTheDocument();
+    expect(await screen.findByText('Cómo vamos')).toBeInTheDocument();
+    expect(screen.getByText('ROAS real (7 días)').nextSibling).toHaveTextContent('6,7x');
+    expect(screen.getByText(/Meta dice 3/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: /tope/i })).toBeInTheDocument();
+    expect(await screen.findByText('¿Hay stock de la Nórdica?')).toBeInTheDocument();
+    expect(screen.getByText('INT_DECO_AMBA')).toBeInTheDocument();
+    expect(screen.getByText(/en aprendizaje/)).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Recomendaciones (1)' })).toBeInTheDocument();
   });
-  it('sin cupo el botón queda deshabilitado', async () => {
-    setup({ overview: overview({ manualRemaining: 0 }) });
-    expect(await screen.findByRole('button', { name: /disponible mañana/i })).toBeDisabled();
-  });
-  it('analizar ahora llama a la API', async () => {
-    const api = setup();
-    await userEvent.click(await screen.findByRole('button', { name: /analizar ahora/i }));
-    expect(api.post).toHaveBeenCalledWith('/agent/run');
-  });
-  it('tarjetas: aprobar una pausa', async () => {
-    const api = setup();
-    const card = (await screen.findByText(/pausar anuncio sillas/i)).closest('article');
-    expect(within(card).getByText('Pausar')).toBeInTheDocument();
-    expect(within(card).getByText('Alta')).toBeInTheDocument();
-    await userEvent.click(within(card).getByRole('button', { name: /aprobar/i }));
-    expect(api.post).toHaveBeenCalledWith('/recommendations/1/approve', {});
-  });
-  it('presupuesto: se puede ajustar el monto antes de aprobar', async () => {
-    const api = setup();
-    const card = (await screen.findByText('Subir Campaña DPA')).closest('article');
-    const input = within(card).getByLabelText(/nuevo presupuesto diario/i);
-    await userEvent.clear(input);
-    await userEvent.type(input, '55000');
-    await userEvent.click(within(card).getByRole('button', { name: /aprobar/i }));
-    expect(api.post).toHaveBeenCalledWith('/recommendations/2/approve', { amount: 55000 });
-  });
-  it('rechazar con motivo rápido', async () => {
-    const api = setup();
-    const card = (await screen.findByText(/pausar anuncio sillas/i)).closest('article');
-    await userEvent.click(within(card).getByRole('button', { name: /rechazar/i }));
-    await userEvent.click(within(card).getByRole('button', { name: /está en lanzamiento/i }));
-    expect(api.post).toHaveBeenCalledWith('/recommendations/1/reject', { reason: 'Está en lanzamiento' });
-  });
-  it('ideas se listan aparte y se marcan como vistas', async () => {
-    const api = setup();
-    await userEvent.click(await screen.findByRole('button', { name: /^vista$/i }));
-    expect(api.post).toHaveBeenCalledWith('/recommendations/3/seen');
-  });
-});
 
-describe('Agente — resultado de aprobar', () => {
-  for (const [res, text] of [
-    [{ status: 'executed' }, /se aplicó en meta/i],
-    [{ status: 'approved' }, /no se tocó meta/i],
-    [{ status: 'stale' }, /no se ejecutó: cambió en meta/i],
-    [{ status: 'failed', error: 'Meta 190: token vencido' }, /no se pudo ejecutar: meta 190: token vencido/i],
-  ]) {
-    it(`muestra el resultado ${res.status}`, async () => {
-      const api = setup();
-      api.post.mockResolvedValueOnce(res);
-      const card = (await screen.findByText(/pausar anuncio sillas/i)).closest('article');
-      await userEvent.click(within(card).getByRole('button', { name: /aprobar/i }));
-      expect(await screen.findByText(text)).toBeInTheDocument();
-    });
-  }
-});
+  it('responder una pregunta con respuesta rápida y analizar', async () => {
+    const { api, user } = setup();
+    await user.click(await screen.findByRole('button', { name: 'Sí' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar y analizar ahora' }));
+    expect(api.post).toHaveBeenCalledWith('/ads/questions/q1/answer', { answer: 'Sí', analyze: true });
+    expect(await screen.findByRole('status')).toHaveTextContent(/arrancó a analizar/);
+  });
 
-describe('Agente — otras pestañas', () => {
-  it('historial muestra el error de ejecución y si quedó a mitad', async () => {
-    const api = setup();
-    const failed = { ...executed, id: 5, status: 'failed', undo_until: null, verdict: null, outcome: null,
-      execution_result: { error: 'Meta 100: error', partial: { applied_from: 32000, revert_error: 'x' } } };
-    api.get.mockImplementation(async (p) => (p.startsWith('/recommendations?group=history') ? [failed] : p === '/agent/overview' ? overview() : []));
-    await userEvent.click(await screen.findByRole('tab', { name: /historial/i }));
-    expect(await screen.findByText(/meta 100: error/i)).toBeInTheDocument();
-    expect(screen.getByText(/quedó a mitad/i)).toBeInTheDocument();
+  it('pausar una campaña pide confirmación antes de tocar Meta', async () => {
+    const { api, user } = setup({ questions: [] });
+    await screen.findByText('AR | VENTAS');
+    const [pausar] = screen.getAllByRole('button', { name: 'Pausar' });
+    await user.click(pausar);
+    expect(api.post).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Sí, pausar' }));
+    expect(api.post).toHaveBeenCalledWith('/ads/objects/900/status', { level: 'campaign', status: 'PAUSED', name: 'AR | VENTAS' });
   });
-  it('historial muestra resultado y permite deshacer', async () => {
-    const api = setup();
-    await userEvent.click(await screen.findByRole('tab', { name: /historial/i }));
-    expect(await screen.findByText('Ejecutada')).toBeInTheDocument();
-    expect(screen.getByText(/mejoró \+25%/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /deshacer/i }));
-    expect(api.post).toHaveBeenCalledWith('/recommendations/4/undo');
+
+  it('recomendaciones: aprobar con doble toque, pedidos de piezas e historial', async () => {
+    const { api, user } = setup();
+    await user.click(await screen.findByRole('tab', { name: /Recomendaciones/ }));
+    const card = (await screen.findByText('Subir AR | VENTAS')).closest('article');
+    expect(within(card).getByText(/\$\s?50\.000 → \$\s?60\.000/)).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Aprobar' }));
+    await user.click(within(card).getByRole('button', { name: 'Aplicar en Meta' }));
+    expect(api.post).toHaveBeenCalledWith('/ads/decisions/d1/approve');
+    expect(screen.getByText('Video del living')).toBeInTheDocument();
+    expect(screen.getByText('Meta 100')).toBeInTheDocument();
   });
-  it('aprendizaje: precisión y lecciones borrables', async () => {
-    const api = setup();
-    await userEvent.click(await screen.findByRole('tab', { name: /aprendizaje/i }));
-    expect(await screen.findByText(/8 de 10 mejoraron/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /borrar/i }));
-    expect(api.del).toHaveBeenCalledWith('/learnings/9');
+
+  it('piezas: crear una con imagen sube el archivo a la pieza', async () => {
+    const { api, user } = setup();
+    await user.click(await screen.findByRole('tab', { name: 'Piezas' }));
+    expect(await screen.findByText('Lámpara Nórdica')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Nueva pieza' }));
+    await user.type(screen.getByLabelText(/Nombre/), 'Sillas');
+    await user.type(screen.getByLabelText(/Texto del anuncio/), 'Sillas de paraíso');
+    const file = new File(['png'], 'feed.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/Feed 4:5/), file);
+    await user.click(screen.getByRole('button', { name: 'Guardar pieza' }));
+    await waitFor(() => expect(api.upload).toHaveBeenCalledWith('/ads/creatives/new/media/feed', file, expect.any(Function)));
+    expect(api.post).toHaveBeenCalledWith('/ads/creatives', expect.objectContaining({ name: 'Sillas', copy: 'Sillas de paraíso', link: '' }));
   });
-  it('configuración: guardar interruptores y umbrales', async () => {
-    const api = setup();
-    await userEvent.click(await screen.findByRole('tab', { name: /configuración/i }));
-    await userEvent.click(await screen.findByLabelText(/ejecución habilitada/i));
-    await userEvent.click(screen.getByRole('button', { name: /guardar/i }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/agent/config', expect.objectContaining({ executionEnabled: true })));
+
+  it('piezas: publicar en un conjunto', async () => {
+    const { api, user } = setup();
+    await user.click(await screen.findByRole('tab', { name: 'Piezas' }));
+    await user.click(await screen.findByRole('button', { name: 'Publicar' }));
+    await user.click(screen.getByRole('button', { name: 'Publicar en Meta' }));
+    expect(api.post).toHaveBeenCalledWith('/ads/creatives/c1/publish', { adset_id: '901', adset_name: 'INT_DECO_AMBA' });
+  });
+
+  it('ajustes: guarda tope y contexto', async () => {
+    const { api, user } = setup();
+    await user.click(await screen.findByRole('tab', { name: 'Ajustes' }));
+    const tope = screen.getByLabelText(/Tope mensual/);
+    await user.clear(tope);
+    await user.type(tope, '1500000');
+    await user.type(screen.getByLabelText(/Contexto para el agente/), 'Empujar iluminación');
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(api.put).toHaveBeenCalledWith('/ads/settings', { agent_enabled: true, autonomous: false, monthly_cap_ars: 1500000, business_notes: 'Empujar iluminación' });
+  });
+
+  it('avisa si falta configurar Meta o Claude', async () => {
+    setup({ overview: overview({ configured: { meta: true, agent: false }, snapshot: null }) });
+    expect(await screen.findByText(/ANTHROPIC_API_KEY/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Analizar ahora' })).not.toBeInTheDocument();
   });
 });

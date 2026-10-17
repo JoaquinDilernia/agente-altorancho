@@ -1,273 +1,234 @@
-import { useState, useCallback, useEffect } from 'react';
-import RecommendationCard, { TYPE_LABEL } from '../components/RecommendationCard.jsx';
+import { useState } from 'react';
+import PageHeader from '../components/PageHeader.jsx';
 import { usePolling } from '../hooks/usePolling.js';
-import { fmtDateTime, fmtRelative } from '../lib/format.js';
+import { fmtDateTime, fmtMoney, fmtNumber, fmtRoas } from '../lib/format.js';
+import { ConfirmButton, Report, StatusBadge, useAction } from './agente/shared.jsx';
+import Preguntas from './agente/Preguntas.jsx';
+import Recomendaciones from './agente/Recomendaciones.jsx';
+import Piezas from './agente/Piezas.jsx';
 
-const TABS = [
-  { id: 'pendientes', label: 'Pendientes' },
-  { id: 'historial', label: 'Historial' },
-  { id: 'aprendizaje', label: 'Aprendizaje' },
-  { id: 'config', label: 'Configuración' },
-];
-const STATUS_LABEL = {
-  pending: 'Pendiente', approved: 'Aprobada (sin ejecutar)', executed: 'Ejecutada', failed: 'Falló', rejected: 'Rechazada',
-  expired: 'Vencida', stale: 'Desactualizada', undone: 'Deshecha', seen: 'Vista',
-};
-const VERDICT = { mejoro: 'Mejoró', neutral: 'Neutral', empeoro: 'Empeoró' };
-
-function verdictText(rec) {
-  if (!rec.verdict) return null;
-  const o = rec.outcome?.d7 || rec.outcome?.d3;
-  const pct = o?.change === null || o?.change === undefined ? '' : ` ${o.change >= 0 ? '+' : ''}${Math.round(o.change * 100)}%`;
-  return `${VERDICT[rec.verdict]}${pct}`;
-}
-
-function approveNotice(res) {
-  switch (res?.status) {
-    case 'executed': return { ok: true, text: 'Listo: se aplicó en Meta. Podés deshacerlo desde Historial durante 24 h.' };
-    case 'approved': return { ok: true, text: 'Aprobada. No se tocó Meta porque la ejecución está apagada.' };
-    case 'stale': return { ok: false, text: 'No se ejecutó: cambió en Meta desde la recomendación.' };
-    case 'failed': return { ok: false, text: `No se pudo ejecutar: ${res.error || 'error desconocido'}` };
-    default: return null;
+const TAB_KEY = 'ar_agente_tab';
+const loadTab = () => {
+  try {
+    return localStorage.getItem(TAB_KEY) || 'resumen';
+  } catch {
+    return 'resumen';
   }
-}
+};
 
-function executionDetail(r) {
-  const e = r.execution_result;
-  if (!e) return null;
-  if (e.partial) return `Quedó a mitad: el origen ya bajó a ${e.partial.applied_from}. Revisalo en Ads Manager.`;
-  if (e.reason) return e.reason;
-  return null;
-}
+export default function Agente({ api }) {
+  const [tab, setTabState] = useState(loadTab);
+  const setTab = (t) => {
+    setTabState(t);
+    try { localStorage.setItem(TAB_KEY, t); } catch { /* sin storage */ }
+  };
+  // Mientras el agente analiza, el resumen se vuelve a pedir cada 5 s
+  const [fast, setFast] = useState(false);
+  const overview = usePolling(() => api.get('/ads/overview').then((d) => {
+    setFast(d.lastRun?.status === 'running');
+    return d;
+  }), [api], fast ? 5000 : 120_000);
+  const data = overview.data;
+  const running = data?.lastRun?.status === 'running';
+  const { busy, error, run } = useAction(() => overview.reload());
 
-function Pendientes({ api, overview, reloadOverview }) {
-  const [busy, setBusy] = useState(null);
-  const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
-  const { data: recs, reload } = usePolling(() => api.get('/recommendations?group=pending'), [api], 60_000);
-
-  const act = useCallback(async (id, fn, describe) => {
-    setBusy(id);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await fn();
-      if (describe) setNotice(describe(res));
-      reload();
-      reloadOverview();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(null);
-    }
-  }, [reload, reloadOverview]);
-
-  const runNow = () => act('run', () => api.post('/agent/run'));
-  const actions = (recs || []).filter((r) => r.type !== 'idea');
-  const ideas = (recs || []).filter((r) => r.type === 'idea');
-  const last = overview?.lastRun;
-  const left = overview?.manualRemaining ?? 0;
+  const tabs = [
+    { id: 'resumen', label: `Resumen${data?.openQuestions ? ` (${data.openQuestions})` : ''}` },
+    { id: 'recomendaciones', label: `Recomendaciones${data?.pendingCount ? ` (${data.pendingCount})` : ''}` },
+    { id: 'piezas', label: 'Piezas' },
+    { id: 'ajustes', label: 'Ajustes' },
+  ];
 
   return (
     <>
-      {overview && (
-        <div className="banner">
-          {last ? `Último análisis: ${fmtDateTime(last.started_at)} · ${last.candidates_count} candidatos · USD ${Number(last.cost_usd).toFixed(2)}` : 'Todavía no hubo análisis.'}
-          {last?.status === 'error' && <div className="error">El último análisis falló.</div>}
-          {!overview.executionEnabled && <div>La ejecución está apagada: aprobar solo registra la decisión (se activa en Configuración).</div>}
+      <PageHeader
+        title="Agente de pauta"
+        subtitle="Meta Ads · ventas en la tienda"
+        actions={data?.configured.agent && (
+          <button type="button" className="btn" disabled={running || !!busy} onClick={() => run('run', () => api.post('/ads/runs'))}>
+            {running ? 'Analizando…' : 'Analizar ahora'}
+          </button>
+        )}
+      />
+      <div className="tabs" role="tablist">
+        {tabs.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'chip active' : 'chip'} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {!data && !overview.error && <p className="muted">Cargando…</p>}
+      {overview.error && <p className="error">{overview.error}</p>}
+      {error && <p className="error">{error}</p>}
+      {data && !data.configured.meta && <p className="banner error">Falta conectar Meta en el servidor (META_ACCESS_TOKEN).</p>}
+      {data && data.configured.meta && !data.configured.agent && <p className="banner error">Falta la clave de Claude (ANTHROPIC_API_KEY): el agente no puede analizar.</p>}
+      {data?.metaError && <p className="banner error">Meta no respondió: {data.metaError}</p>}
+      {data && tab === 'resumen' && <Resumen api={api} data={data} reload={overview.reload} />}
+      {data && tab === 'recomendaciones' && <Recomendaciones api={api} onChange={overview.reload} />}
+      {data && tab === 'piezas' && <Piezas api={api} snapshot={data.snapshot} storeUrl={data.storeUrl} />}
+      {data && tab === 'ajustes' && <Ajustes api={api} settings={data.settings} onSaved={overview.reload} />}
+    </>
+  );
+}
+
+function Resumen({ api, data, reload }) {
+  const snap = data.snapshot;
+  const cap = data.settings.monthly_cap_ars;
+  const last = data.lastRun;
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await api.get('/ads/overview?refresh=1');
+      reload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  return (
+    <>
+      {snap && (
+        <div className="cards">
+          <div className="card"><div className="card-label">Gasto hoy</div><div className="card-value">{fmtMoney(snap.spendToday)}</div></div>
+          <div className="card">
+            <div className="card-label">Gasto del mes</div><div className="card-value">{fmtMoney(snap.month.spend)}</div>
+            {cap > 0
+              ? (
+                <>
+                  <div className="bar" style={{ marginTop: 6 }} role="progressbar" aria-label="Gasto contra el tope" aria-valuenow={snap.month.spend} aria-valuemax={cap}>
+                    <span style={{ width: `${Math.min(100, (snap.month.spend * 100) / cap)}%`, '--tag': snap.month.spend > cap ? 'var(--warn)' : 'var(--text)' }} />
+                  </div>
+                  <div className="card-sub">Tope {fmtMoney(cap)}</div>
+                </>
+              )
+              : <div className="card-sub">Sin tope cargado (Ajustes)</div>}
+          </div>
+          <div className="card">
+            <div className="card-label">Ventas reales Meta (7 días)</div><div className="card-value">{fmtNumber(snap.last7d.meta.sales)}</div>
+            <div className="card-sub">Meta dice {fmtNumber(snap.last7d.meta.metaPurchases)} · {fmtMoney(snap.last7d.meta.revenue)}</div>
+          </div>
+          <div className="card"><div className="card-label">ROAS real (7 días)</div><div className="card-value">{fmtRoas(snap.last7d.meta.roas)}</div></div>
         </div>
       )}
-      <div className="actions" style={{ marginBottom: 12 }}>
-        <button type="button" className="btn secondary" disabled={left <= 0 || overview?.running || busy === 'run'} onClick={runNow}>
-          {overview?.running ? 'Analizando…' : left > 0 ? `Analizar ahora (te quedan ${left})` : 'Disponible mañana'}
-        </button>
-      </div>
-      {error && <p className="error">{error}</p>}
-      {notice && <p role="status" className={notice.ok ? 'banner' : 'banner error'}>{notice.text}</p>}
-      {recs && actions.length === 0 && <p className="muted">No hay recomendaciones pendientes.</p>}
-      {actions.map((r) => (
-        <RecommendationCard key={r.id} rec={r} busy={busy === r.id}
-          onApprove={(amount) => act(r.id, () => api.post(`/recommendations/${r.id}/approve`, amount === undefined ? {} : { amount }), approveNotice)}
-          onReject={(reason) => act(r.id, () => api.post(`/recommendations/${r.id}/reject`, { reason }))} />
-      ))}
-      {ideas.length > 0 && (
+
+      <section className="rec">
+        <div className="rec-head" style={{ justifyContent: 'space-between' }}>
+          <strong>Último informe del agente</strong>
+          {last && <span className="note" style={{ margin: 0 }}>{last.status === 'running' ? 'Analizando…' : fmtDateTime(last.finished_at || last.started_at)}</span>}
+        </div>
+        {!last && <p className="muted">Todavía no corrió. Corre solo todos los días a las 8:00, o tocá “Analizar ahora”.</p>}
+        {last?.status === 'running' && <p className="muted">El agente está mirando la cuenta y las ventas. Tarda unos minutos.</p>}
+        {last?.status === 'failed' && <p className="error">Falló el análisis: {last.error}</p>}
+        {last?.report && last.status !== 'running' && <Report text={last.report} />}
+      </section>
+
+      <Preguntas api={api} onChange={reload} />
+
+      {snap && (
         <>
-          <h2 className="section-title">Ideas</h2>
-          <ul className="list">
-            {ideas.map((r) => (
-              <li key={r.id} className="row">
-                <div className="row-main">
-                  <div className="row-title" style={{ whiteSpace: 'normal' }}>{r.title}</div>
-                  <div className="note">{r.reasoning}</div>
-                </div>
-                <div className="row-side">
-                  <button type="button" className="chip" disabled={busy === r.id} onClick={() => act(r.id, () => api.post(`/recommendations/${r.id}/seen`))}>Vista</button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 className="section-title">Campañas</h2>
+            <button type="button" className="chip" disabled={refreshing} onClick={refresh}>{refreshing ? 'Actualizando…' : 'Actualizar'}</button>
+          </div>
+          {snap.campaigns.length === 0 && <p className="muted">No hay campañas en la cuenta.</p>}
+          {snap.campaigns.map((c) => <Campaign key={c.id} api={api} c={c} snap={snap} onChange={reload} />)}
         </>
       )}
     </>
   );
 }
 
-function Historial({ api }) {
-  const [type, setType] = useState('');
-  const [error, setError] = useState(null);
-  const { data: recs, reload } = usePolling(() => api.get(`/recommendations?group=history${type ? `&type=${type}` : ''}`), [api, type], 120_000);
-  const undo = async (id) => {
-    setError(null);
-    try {
-      await api.post(`/recommendations/${id}/undo`);
-      reload();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
+const realLine = (m) => `${fmtNumber(m.sales)} ventas · ${fmtMoney(m.spend)} · ROAS ${fmtRoas(m.roas)}`;
+
+function StatusToggle({ api, level, obj, onChange }) {
+  const { busy, error, run } = useAction(onChange);
+  const active = obj.status === 'ACTIVE';
   return (
-    <>
-      <div className="chips" style={{ marginBottom: 10 }}>
-        {[['', 'Todas'], ...Object.entries(TYPE_LABEL)].map(([id, label]) => (
-          <button key={id || 'all'} type="button" className={type === id ? 'chip active' : 'chip'} onClick={() => setType(id)}>{label}</button>
-        ))}
+    <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <ConfirmButton className="chip" label={active ? 'Pausar' : 'Activar'} confirmLabel={active ? 'Sí, pausar' : 'Sí, activar (gasta)'} disabled={!!busy}
+        onConfirm={() => run('s', () => api.post(`/ads/objects/${obj.id}/status`, { level, status: active ? 'PAUSED' : 'ACTIVE', name: obj.name }))} />
+      {error && <span className="error">{error}</span>}
+    </span>
+  );
+}
+
+function Campaign({ api, c, snap, onChange }) {
+  const adsets = snap.adsets.filter((a) => a.campaignId === c.id);
+  return (
+    <div className="tree">
+      <div className="row" style={{ alignItems: 'center' }}>
+        <div className="row-main">
+          <div className="row-title">{c.name}</div>
+          <div className="row-sub">{c.dailyBudgetArs ? `${fmtMoney(c.dailyBudgetArs)} por día` : 'Presupuesto por conjunto'} · {realLine(c.last7d)}</div>
+        </div>
+        <div className="row-side"><StatusBadge status={c.effectiveStatus} /> <StatusToggle api={api} level="campaign" obj={c} onChange={onChange} /></div>
       </div>
-      {error && <p className="error">{error}</p>}
-      <ul className="list">
-        {(recs || []).map((r) => {
-          const canUndo = r.status === 'executed' && r.undo_until && new Date(r.undo_until) > new Date();
-          return (
-            <li key={r.id} className="row">
+      {adsets.map((a) => {
+        const ads = snap.ads.filter((ad) => ad.adsetId === a.id);
+        return (
+          <div key={a.id} className="tree-adset">
+            <div className="row" style={{ alignItems: 'center' }}>
               <div className="row-main">
-                <div className="row-title" style={{ whiteSpace: 'normal' }}>{r.title}</div>
+                <div className="row-title">{a.name}</div>
                 <div className="row-sub">
-                  <span className={['failed', 'stale'].includes(r.status) ? 'badge warn' : 'badge'}>{STATUS_LABEL[r.status]}</span>
-                  {r.decided_at && <span>{fmtRelative(r.decided_at)}</span>}
-                  {r.reject_reason && <span>· {r.reject_reason}</span>}
+                  {a.dailyBudgetArs ? `${fmtMoney(a.dailyBudgetArs)}/día · ` : ''}{realLine(a.last7d)}{a.learningStage === 'LEARNING' ? ' · en aprendizaje' : ''}
                 </div>
-                {verdictText(r) && <div className="note">Resultado: {verdictText(r)}</div>}
-                {r.execution_result?.error && <div className="error">Error: {r.execution_result.error}</div>}
-                {executionDetail(r) && <div className="note">{executionDetail(r)}</div>}
               </div>
-              {canUndo && (
-                <div className="row-side"><button type="button" className="chip" onClick={() => undo(r.id)}>Deshacer</button></div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      {recs && recs.length === 0 && <p className="muted">Todavía no hay historial.</p>}
-    </>
-  );
-}
-
-function Aprendizaje({ api, overview }) {
-  const { data: learnings, reload } = usePolling(() => api.get('/learnings'), [api], 300_000);
-  const remove = async (id) => {
-    await api.del(`/learnings/${id}`);
-    reload();
-  };
-  return (
-    <>
-      <h2 className="section-title" style={{ marginTop: 0 }}>Precisión del agente</h2>
-      {(overview?.precision || []).length === 0 && <p className="muted">Todavía no hay resultados medidos.</p>}
-      <ul className="list">
-        {(overview?.precision || []).map((p) => (
-          <li key={p.type} className="row"><span>{TYPE_LABEL[p.type]}</span><span>{p.good} de {p.total} mejoraron</span></li>
-        ))}
-      </ul>
-      <h2 className="section-title">Lecciones</h2>
-      {(learnings || []).length === 0 && <p className="muted">El agente todavía no guardó lecciones.</p>}
-      <ul className="list">
-        {(learnings || []).map((l) => (
-          <li key={l.id} className="row">
-            <div className="row-main">
-              <div style={{ whiteSpace: 'normal' }}>{l.text}</div>
-              <div className="row-sub">Evidencia: recomendaciones {l.evidence_ids.join(', ')}</div>
+              <div className="row-side"><StatusBadge status={a.effectiveStatus} /> <StatusToggle api={api} level="adset" obj={a} onChange={onChange} /></div>
             </div>
-            <div className="row-side"><button type="button" className="chip" onClick={() => remove(l.id)}>Borrar</button></div>
-          </li>
-        ))}
-      </ul>
-    </>
+            {ads.length === 0 && <p className="error" style={{ padding: '6px 0' }}>Sin anuncios: cargá una pieza en “Piezas” y publicala acá.</p>}
+            {ads.map((ad) => (
+              <div key={ad.id} className="row tree-ad" style={{ alignItems: 'center' }}>
+                {ad.thumbnail && <img src={ad.thumbnail} alt="" className="thumb-sm" />}
+                <div className="row-main">
+                  <div className="row-title">{ad.name}</div>
+                  <div className="row-sub">{realLine(ad.last7d)}{ad.delivery7d.frequency ? ` · frec. ${String(ad.delivery7d.frequency).replace('.', ',')}` : ''}</div>
+                </div>
+                <div className="row-side"><StatusBadge status={ad.effectiveStatus} /> <StatusToggle api={api} level="ad" obj={ad} onChange={onChange} /></div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-function Config({ api, overview }) {
-  const [cfg, setCfg] = useState(null);
+function Ajustes({ api, settings, onSaved }) {
+  const [form, setForm] = useState(settings);
   const [msg, setMsg] = useState(null);
-  useEffect(() => { api.get('/agent/config').then(setCfg).catch((e) => setMsg(e.message)); }, [api]);
-  if (!cfg) return msg ? <p className="error">{msg}</p> : <p className="muted">Cargando…</p>;
-
-  const set = (path, value) => setCfg((c) => {
-    const [a, b] = path.split('.');
-    return b ? { ...c, [a]: { ...c[a], [b]: value } } : { ...c, [a]: value };
+  const { busy, error, run } = useAction(() => {
+    setMsg('Guardado');
+    onSaved();
   });
-  const num = (path, label) => {
-    const [a, b] = path.split('.');
-    const value = b ? cfg[a][b] : cfg[a];
-    return (
-      <label className="form-row">
-        {label}
-        <input type="number" step="any" value={value} onChange={(e) => set(path, Number(e.target.value))} />
-      </label>
-    );
-  };
-  const save = async () => {
-    setMsg(null);
-    try {
-      const { agentEnabled, executionEnabled, monthlyBudgetUsd, manualRunsPerDay, expireHours, budget, thresholds } = cfg;
-      setCfg(await api.put('/agent/config', { agentEnabled, executionEnabled, monthlyBudgetUsd, manualRunsPerDay, expireHours, budget, thresholds }));
-      setMsg('Guardado');
-    } catch (e) {
-      setMsg(e.message);
-    }
-  };
-
+  const dirty = JSON.stringify(form) !== JSON.stringify(settings);
+  const save = () => run('save', () => api.put('/ads/settings', {
+    agent_enabled: form.agent_enabled, autonomous: form.autonomous, monthly_cap_ars: form.monthly_cap_ars, business_notes: form.business_notes,
+  }));
   return (
-    <>
-      <label className="form-row">Agente activado
-        <input type="checkbox" checked={cfg.agentEnabled} onChange={(e) => set('agentEnabled', e.target.checked)} />
+    <section className="form">
+      <label className="check">
+        <input type="checkbox" checked={form.agent_enabled} onChange={(e) => setForm({ ...form, agent_enabled: e.target.checked })} />
+        <span><strong>Informe diario</strong><span className="note">El agente analiza la cuenta todos los días a las 8:00.</span></span>
       </label>
-      <label className="form-row">Ejecución habilitada
-        <input type="checkbox" checked={cfg.executionEnabled} onChange={(e) => set('executionEnabled', e.target.checked)} />
+      <label className="check">
+        <input type="checkbox" checked={form.autonomous} onChange={(e) => setForm({ ...form, autonomous: e.target.checked })} />
+        <span><strong>Pausar anuncios solo</strong><span className="note">Si está prendido, el agente pausa anuncios que gastan sin vender sin esperar aprobación. Todo lo demás siempre se aprueba acá.</span></span>
       </label>
-      <p className="note">Automático por tipo de acción: todo apagado (todas las acciones requieren aprobación).</p>
-      <h2 className="section-title">Detección</h2>
-      {num('thresholds.noSalesSpendMultiple', 'Gasta sin vender: gasto ≥ × costo por venta')}
-      {num('thresholds.expensiveRoasRatio', 'Caro: ROAS < × promedio')}
-      {num('thresholds.winnerRoasRatio', 'Ganador: ROAS ≥ × promedio')}
-      {num('thresholds.winnerMinSales', 'Ganador: ventas mínimas (7 días)')}
-      <h2 className="section-title">Topes</h2>
-      {num('budget.maxChangePct', 'Cambio máximo de presupuesto (%)')}
-      {num('expireHours', 'Vencimiento de tarjetas (horas)')}
-      {num('manualRunsPerDay', 'Análisis manuales por día')}
-      {num('monthlyBudgetUsd', 'Tope mensual de API (USD)')}
-      <p className="note">Consumido este mes: USD {Number(overview?.monthCostUsd || 0).toFixed(2)}</p>
+      <label className="field">Tope mensual de inversión en Meta (pesos)
+        <input className="input" type="number" min={0} step={10000} value={form.monthly_cap_ars}
+          onChange={(e) => setForm({ ...form, monthly_cap_ars: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+        <span className="note">0 = sin tope: el agente te lo va a preguntar antes de proponer subas.</span>
+      </label>
+      <label className="field">Contexto para el agente
+        <textarea className="input" rows={5} maxLength={5000} value={form.business_notes} onChange={(e) => setForm({ ...form, business_notes: e.target.value })}
+          placeholder="Promos, productos o categorías a empujar, stock, qué no hacer…" />
+      </label>
+      {error && <p className="error">{error}</p>}
       <div className="actions">
-        <button type="button" className="btn" onClick={save}>Guardar</button>
-        {msg && <span className={msg === 'Guardado' ? 'note' : 'error'}>{msg}</span>}
+        <button type="button" className="btn" disabled={!dirty || !!busy} onClick={save}>Guardar</button>
+        {msg && !dirty && <span className="note" role="status">{msg}</span>}
       </div>
-    </>
-  );
-}
-
-export default function Agente({ api }) {
-  const [tab, setTab] = useState('pendientes');
-  const { data: overview, reload: reloadOverview } = usePolling(() => api.get('/agent/overview'), [api], 30_000);
-  return (
-    <>
-      <div className="tabs" role="tablist">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'chip active' : 'chip'} onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {tab === 'pendientes' && <Pendientes api={api} overview={overview} reloadOverview={reloadOverview} />}
-      {tab === 'historial' && <Historial api={api} />}
-      {tab === 'aprendizaje' && <Aprendizaje api={api} overview={overview} />}
-      {tab === 'config' && <Config api={api} overview={overview} />}
-    </>
+    </section>
   );
 }
