@@ -104,4 +104,30 @@ describe('cliente meta', () => {
     expect(JSON.parse(fetchFn.mock.calls[1][1].body)).toEqual({ daily_budget: 5500040 });
     expect(new URL(fetchFn.mock.calls[2][0]).searchParams.get('fields')).toBe('daily_budget');
   });
+  it('agente de pauta: imagen a la biblioteca, página con Instagram y video al host de videos', async () => {
+    const fetchFn = vi.fn(async (url) => {
+      const u = new URL(url);
+      if (u.pathname.endsWith('/adimages')) return ok({ images: { 'bytes': { hash: 'abc', url: 'https://img/abc.png' } } });
+      if (u.pathname.endsWith('/promote_pages')) return ok({ data: [{ id: 'P1' }, { id: 'P2', instagram_business_account: { id: 'IG2' } }] });
+      if (u.hostname === 'graph-video.facebook.com') return ok({ id: 'V1' });
+      return { status: 502, json: async () => { throw new SyntaxError('vacío'); } };
+    });
+    const meta = make(fetchFn);
+    expect(await meta.uploadImage(Buffer.from('x'))).toEqual({ hash: 'abc', url: 'https://img/abc.png' });
+    expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({ bytes: Buffer.from('x').toString('base64') });
+    expect(await meta.discoverIdentity()).toEqual({ pageId: 'P2', igUserId: 'IG2' });
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const tmp = path.join(os.tmpdir(), `meta-test-${Date.now()}.mp4`);
+    fs.writeFileSync(tmp, 'video');
+    try {
+      expect(await meta.uploadVideoFile(tmp, 'Reel')).toBe('V1');
+      const form = fetchFn.mock.calls.at(-1)[1].body;
+      expect(form.get('name')).toBe('Reel');
+    } finally {
+      fs.rmSync(tmp);
+    }
+    await expect(meta.getObject('1', 'status')).rejects.toThrow(/HTTP 502 sin datos válidos/);
+  });
 });

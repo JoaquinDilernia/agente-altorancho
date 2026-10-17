@@ -9,6 +9,7 @@ describe('migraciones', () => {
       "SELECT table_name::text AS t FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1",
     );
     expect(rows.map((r) => r.t)).toEqual([
+      'ad_creative_media', 'ad_creative_requests', 'ad_creatives', 'ad_decisions', 'ad_ig_promotions', 'ad_learnings', 'ad_questions', 'ad_runs', 'ad_settings',
       'agent_config', 'agent_runs', 'ga4_transactions', 'google_campaigns', 'google_entities', 'google_spend_daily', 'learnings', 'meta_ads', 'meta_spend_daily',
       'order_attribution', 'order_items', 'orders', 'recommendations', 'schema_migrations', 'sync_runs',
     ]);

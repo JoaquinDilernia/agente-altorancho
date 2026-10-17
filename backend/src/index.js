@@ -18,14 +18,9 @@ import { createJobRunner } from './sync/jobs.js';
 import { createJobCatalog } from './jobsCatalog.js';
 import { artDate, addDays } from './engine/dates.js';
 import Anthropic from '@anthropic-ai/sdk';
-import { createAgentConfigRepo } from './repo/agentConfig.js';
-import { createAgentMetrics } from './repo/agentMetrics.js';
-import { createRecommendationsRepo, createAgentRunsRepo, createLearningsRepo } from './repo/recommendations.js';
-import { buildDataset } from './agent/dataset.js';
-import { createAgentRunner } from './agent/runner.js';
-import { createExecutor } from './agent/executor.js';
-import { createOutcomeMeter } from './agent/outcomes.js';
-import { createAgentRouter } from './routes/agent.js';
+import { createAdsRepo } from './repo/ads.js';
+import { adsConfigFromEnv, createAgentRunner, createExecutor, createIdentity } from './ads/agent.js';
+import { createAdsRouter } from './routes/ads.js';
 import { createGoogleRepo } from './repo/google.js';
 import { createGa4Client } from './services/ga4.js';
 import { createGa4Repo } from './repo/ga4.js';
@@ -65,18 +60,16 @@ const ga4Sync = process.env.GA4_SERVICE_ACCOUNT && process.env.GA4_PROPERTY_ID
 const jobCatalog = createJobCatalog({ orderSync, metaSync, ga4Sync, ordersRepo, syncRuns });
 const runJob = (name) => jobs.run(jobCatalog[name].source, jobCatalog[name].fn);
 
-const configRepo = createAgentConfigRepo(db);
-const recsRepo = createRecommendationsRepo(db);
-const agentRuns = createAgentRunsRepo(db);
-const learningsRepo = createLearningsRepo(db);
-const agentMetrics = createAgentMetrics({ db, reports });
-const runner = createAgentRunner({
+// Agente de pauta (mismo que uniformar, con ventas reales de la tienda como métrica)
+const adsRepo = createAdsRepo(db);
+await adsRepo.markStaleRuns();
+const adsConfig = adsConfigFromEnv();
+const identity = createIdentity({ meta, config: adsConfig });
+const execute = createExecutor({ meta, repo: adsRepo, config: adsConfig, identity });
+const startAdsRun = createAgentRunner({
   anthropic: new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') }),
-  configRepo, runs: agentRuns, recs: recsRepo, learnings: learningsRepo,
-  loadDataset: () => buildDataset({ db, metrics: agentMetrics, today: artDate() }),
+  meta, reports, repo: adsRepo, execute, identity, model: process.env.ADS_AGENT_MODEL || undefined,
 });
-const executor = createExecutor({ meta, recs: recsRepo, configRepo });
-const meter = createOutcomeMeter({ db, recs: recsRepo, metrics: agentMetrics });
 
 async function onOrderEvent(event) {
   try {
@@ -96,7 +89,7 @@ const app = createApp({
   apiRouter: [
     createAuthMiddleware({ password: env('DASHBOARD_PASSWORD') }),
     createApiRouter({ reports, syncRuns, metaRepo, urlTagger, jobs, jobCatalog }),
-    createAgentRouter({ runner, executor, recs: recsRepo, runs: agentRuns, learnings: learningsRepo, configRepo }),
+    createAdsRouter({ repo: adsRepo, meta, reports, startRun: startAdsRun, execute, identity, config: adsConfig }),
   ],
   staticDir: fs.existsSync(path.join(distDir, 'index.html')) ? distDir : undefined,
   health: async () => {
@@ -119,17 +112,21 @@ cron.schedule('15 * * * *', async () => {
 // Correcciones tardías de Meta — últimos 7 días, 05:00 ART
 cron.schedule('0 5 * * *', () => runJob('meta-spend'), TZ);
 
-// Análisis diario del agente: datos frescos de Meta y corrida (08:00 ART)
+// Análisis diario del agente de pauta: gasto de Meta y órdenes al día, después la corrida (08:00 ART)
 cron.schedule('0 8 * * *', async () => {
   await runJob('meta-catalog');
   await runJob('meta-spend');
-  await runner.run({ trigger: 'cron' }).catch(() => {});
+  await runJob('tn-incremental');
+  try {
+    const { done } = await startAdsRun('daily');
+    const run = await done;
+    console.log(`[ads] corrida diaria: ${run.status}`);
+  } catch (err) {
+    console.error('[ads] corrida diaria no arrancó:', err.message);
+  }
 }, TZ);
-// Resultados de lo ejecutado (09:00 ART) y vencimiento de pendientes (cada hora)
 // GA4 procesa con demora: cada hora se re-trae los últimos 3 días
 if (ga4Sync) cron.schedule('40 * * * *', () => runJob('ga4'), TZ);
-cron.schedule('0 9 * * *', () => meter.measure().catch((e) => console.error('[agente] medición falló:', e)), TZ);
-cron.schedule('30 * * * *', () => executor.expire().catch((e) => console.error('[agente] vencimiento falló:', e)), TZ);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`altorancho-backend escuchando en :${port}`));
