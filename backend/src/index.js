@@ -88,8 +88,9 @@ const app = createApp({
   webhookRouter: createWebhookRouter({ secret: process.env.TIENDANUBE_WEBHOOK_SECRET, onOrderEvent }),
   apiRouter: [
     createAuthMiddleware({ password: env('DASHBOARD_PASSWORD') }),
-    createApiRouter({ reports, syncRuns, metaRepo, urlTagger, jobs, jobCatalog }),
+    // El del agente va primero: sus rutas fijas (/ads/overview, /ads/creatives…) si no las agarra GET /ads/:id
     createAdsRouter({ repo: adsRepo, meta, reports, startRun: startAdsRun, execute, identity, config: adsConfig }),
+    createApiRouter({ reports, syncRuns, metaRepo, urlTagger, jobs, jobCatalog }),
   ],
   staticDir: fs.existsSync(path.join(distDir, 'index.html')) ? distDir : undefined,
   health: async () => {
