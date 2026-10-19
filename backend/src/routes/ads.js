@@ -58,6 +58,8 @@ async function readBuffer(req, max, msg) {
 
 const LEVEL_LABEL = { campaign: 'la campaña', adset: 'el conjunto', ad: 'el anuncio' };
 const SNAPSHOT_TTL_MS = 5 * 60_000;
+const SNAPSHOT_ERROR_TTL_MS = 2 * 60_000;
+const SNAPSHOT_WAIT_MS = 15_000; // el panel no espera más que esto: la consulta sigue y llena el cache
 const SETTINGS = {
   agent_enabled: (v) => typeof v === 'boolean',
   autonomous: (v) => typeof v === 'boolean',
@@ -70,13 +72,26 @@ export function createAdsRouter({ repo, meta, reports, startRun, execute, identi
   const r = express.Router();
   const needMeta = (_req, _res, next) => next(meta && execute ? undefined : httpError(503, 'Falta conectar Meta (META_ACCESS_TOKEN) en el servidor.'));
 
-  // La foto de Meta se cachea unos minutos: cada carga del panel no le pega a la API
+  // La foto de Meta se cachea unos minutos: cada carga del panel no le pega a la API.
+  // Una sola consulta a la vez (si Meta limita, los reintentos tardan minutos y cada recarga sumaría llamadas)
+  // y un error se recuerda un rato para no insistirle a una cuenta que ya está limitada.
   let cache = null;
+  let inflight = null;
+  let failure = null;
   async function snapshot(force) {
     if (!force && cache && Date.now() - cache.at < SNAPSHOT_TTL_MS) return cache.data;
-    const data = await buildSnapshot({ meta, reports });
-    cache = { at: Date.now(), data };
-    return data;
+    if (!force && failure && Date.now() - failure.at < SNAPSHOT_ERROR_TTL_MS) throw failure.err;
+    inflight ??= buildSnapshot({ meta, reports })
+      .then((data) => {
+        cache = { at: Date.now(), data };
+        failure = null;
+        return data;
+      }, (err) => {
+        failure = { at: Date.now(), err };
+        throw err;
+      })
+      .finally(() => { inflight = null; });
+    return inflight;
   }
   let igCache = null;
   async function igPosts(force) {
@@ -105,10 +120,17 @@ export function createAdsRouter({ repo, meta, reports, startRun, execute, identi
     let snap = null;
     let metaError = null;
     if (meta) {
+      let timer;
+      const slow = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('está tardando en responder (seguramente por el límite de llamadas); se sigue cargando, probá en un rato')), SNAPSHOT_WAIT_MS);
+      });
       try {
-        snap = await snapshot(req.query.refresh === '1');
+        snap = await Promise.race([snapshot(req.query.refresh === '1'), slow]);
       } catch (err) {
         metaError = String(err.message || err);
+        snap = cache?.data ?? null; // mejor la última foto que nada
+      } finally {
+        clearTimeout(timer);
       }
     }
     res.json({

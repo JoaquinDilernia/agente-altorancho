@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createTestDb } from './helpers/testDb.js';
-import { buildAdsApp, fakeAnthropic, toolTurn, waitRun, contextSection, PNG_1x1, MP4 } from './helpers/adsFakes.js';
+import { buildAdsApp, fakeMeta, fakeAnthropic, toolTurn, waitRun, contextSection, PNG_1x1, MP4 } from './helpers/adsFakes.js';
 import { buildLinkCreativeSpec, buildAdName, buildIgPostCreativeSpec } from '../src/ads/creativeSpec.js';
 import { summarizeMetaRow, realMetrics } from '../src/ads/metrics.js';
 import { createIdentity } from '../src/ads/agent.js';
@@ -276,6 +276,21 @@ describe('agente de pauta', () => {
     const other = await dispatch('set_status', { object_id: '900', status: 'ACTIVE' }, { runId: run.id, settings: { autonomous: true } });
     expect(other).toMatchObject({ queued: true });
     expect(executed).toEqual(['pause_ad']);
+  });
+});
+
+describe('pauta con Meta limitado', () => {
+  it('avisa el error y no le vuelve a pegar a Meta en cada recarga', async () => {
+    const db = await createTestDb();
+    let calls = 0;
+    const meta = { ...fakeMeta(), getCampaigns: async () => { calls += 1; throw new Error('Meta 80004: too many calls'); } };
+    const { call } = buildAdsApp({ db, meta });
+    const first = await call('get', '/api/ads/overview');
+    expect(first.status).toBe(200);
+    expect(first.body.metaError).toMatch(/80004/);
+    expect((await call('get', '/api/ads/overview')).body.metaError).toMatch(/80004/);
+    expect(calls).toBe(1);
+    await db.close();
   });
 });
 
