@@ -3,7 +3,7 @@ import { createTestDb } from './helpers/testDb.js';
 import { buildAdsApp, fakeMeta, fakeAnthropic, toolTurn, waitRun, contextSection, PNG_1x1, MP4 } from './helpers/adsFakes.js';
 import { buildLinkCreativeSpec, buildAdName, buildIgPostCreativeSpec } from '../src/ads/creativeSpec.js';
 import { summarizeMetaRow, realMetrics } from '../src/ads/metrics.js';
-import { createIdentity } from '../src/ads/agent.js';
+import { createIdentity, trimForAgent } from '../src/ads/agent.js';
 import { URL_TAGS_TEMPLATE } from '../src/engine/urlTags.js';
 
 describe('métricas y creativos', () => {
@@ -302,5 +302,27 @@ describe('pauta sin Meta configurado', () => {
     expect(res.body.configured).toEqual({ meta: false, agent: false });
     expect((await call('post', '/api/ads/runs')).status).toBe(503);
     await db.close();
+  });
+});
+
+describe('contexto del agente', () => {
+  const quiet = { spend: 0, sales: 0 };
+  const obj = (id, effectiveStatus, last7d = quiet, extra = {}) => ({ id, effectiveStatus, last7d, prev7d: quiet, ...extra });
+  it('no manda lo pausado sin gasto ni ventas en 14 días (solo lo cuenta)', () => {
+    const out = trimForAgent({
+      campaigns: [obj('c1', 'ACTIVE'), obj('c2', 'PAUSED'), obj('c3', 'PAUSED')],
+      adsets: [obj('s1', 'ACTIVE', quiet, { campaignId: 'c1' }), obj('s2', 'PAUSED', quiet, { campaignId: 'c2' }), obj('s3', 'PAUSED', quiet, { campaignId: 'c3' })],
+      ads: [
+        obj('a1', 'ACTIVE', quiet, { adsetId: 's1', thumbnail: 'https://t', copy: 'x'.repeat(1000), delivery7d: quiet }),
+        obj('a2', 'ADSET_PAUSED', { spend: 500, sales: 0 }, { adsetId: 's2', delivery7d: quiet }),
+        obj('a3', 'PAUSED', quiet, { adsetId: 's3', delivery7d: quiet }),
+      ],
+    });
+    expect(out.ads.map((a) => a.id)).toEqual(['a1', 'a2']);
+    expect(out.adsets.map((a) => a.id)).toEqual(['s1', 's2']); // s2 queda porque su anuncio gastó
+    expect(out.campaigns.map((c) => c.id)).toEqual(['c1', 'c2']);
+    expect(out.omitted).toEqual({ campaigns: 1, adsets: 1, ads: 1 });
+    expect(out.ads[0].thumbnail).toBeUndefined();
+    expect(out.ads[0].copy).toHaveLength(400);
   });
 });

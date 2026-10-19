@@ -212,6 +212,27 @@ async function igPostsForContext({ meta, repo, identity }) {
 
 const mediaKind = (m) => (m ? m.kind : null);
 
+// La cuenta acumula años de anuncios pausados (con copy y segmentación cada uno): mandarlos todos pasaba el
+// millón de tokens. Al agente le llega lo prendido y lo que gastó o vendió en las últimas dos semanas.
+const OFF = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED']);
+const MAX_CONTEXT_CHARS = 1_500_000; // ~400 mil tokens: más que eso es un error, no un análisis
+const moved = (o) => Boolean(o.last7d.spend || o.last7d.sales || o.prev7d.spend || o.prev7d.sales || o.delivery7d?.spend);
+const relevant = (o) => !OFF.has(o.effectiveStatus) || moved(o);
+
+export function trimForAgent(snapshot) {
+  const ads = snapshot.ads.filter(relevant).map(({ thumbnail, ...a }) => ({ ...a, copy: a.copy ? a.copy.slice(0, 400) : a.copy }));
+  const adsetsWithAds = new Set(ads.map((a) => a.adsetId));
+  const adsets = snapshot.adsets.filter((a) => relevant(a) || adsetsWithAds.has(a.id));
+  const adsetCampaigns = new Set(adsets.map((a) => a.campaignId));
+  const campaigns = snapshot.campaigns.filter((c) => relevant(c) || adsetCampaigns.has(c.id));
+  const omitted = {
+    campaigns: snapshot.campaigns.length - campaigns.length,
+    adsets: snapshot.adsets.length - adsets.length,
+    ads: snapshot.ads.length - ads.length,
+  };
+  return { campaigns, adsets, ads, omitted };
+}
+
 export async function buildContext({ meta, reports, repo, identity }) {
   const [snapshot, settings, unusedCreatives, openRequests, learnings, pending, recent, toEvaluate, openQuestions, answeredQuestions, igPosts] = await Promise.all([
     buildSnapshot({ meta, reports }),
@@ -226,14 +247,17 @@ export async function buildContext({ meta, reports, repo, identity }) {
     repo.answeredSinceLastRun(),
     igPostsForContext({ meta, repo, identity }),
   ]);
+  const structure = trimForAgent(snapshot);
   const sections = {
     today: snapshot.today,
     settings: { monthly_cap_ars: settings.monthly_cap_ars, autonomous: settings.autonomous, business_notes: settings.business_notes },
     spendThisMonth: snapshot.month.spend,
     account: { spendToday: snapshot.spendToday, month: snapshot.month, last7d: snapshot.last7d },
-    campaigns: snapshot.campaigns,
-    adsets: snapshot.adsets,
-    ads: snapshot.ads,
+    // Pausados sin gasto ni ventas en 14 días: no se mandan, solo se cuentan
+    omittedPausedWithoutActivity: structure.omitted,
+    campaigns: structure.campaigns,
+    adsets: structure.adsets,
+    ads: structure.ads,
     unusedCreatives: unusedCreatives.map((c) => ({
       id: c.id, name: c.name, copy: c.copy, headline: c.headline, link: c.link, notes: c.notes, feed: mediaKind(c.feed), story: mediaKind(c.story),
     })),
@@ -246,7 +270,12 @@ export async function buildContext({ meta, reports, repo, identity }) {
     openQuestions: openQuestions.map((q) => ({ id: q.id, question: q.question, created_at: q.created_at })),
     answeredQuestions: answeredQuestions.map((q) => ({ question: q.question, answer: q.answer, answered_at: q.answered_at })),
   };
-  return Object.entries(sections).map(([k, v]) => `## ${k}\n${JSON.stringify(v)}`).join('\n\n');
+  const text = Object.entries(sections).map(([k, v]) => `## ${k}\n${JSON.stringify(v)}`).join('\n\n');
+  if (text.length > MAX_CONTEXT_CHARS) {
+    const sizes = Object.entries(sections).map(([k, v]) => `${k} ${Math.round(JSON.stringify(v).length / 1000)}k`).join(', ');
+    throw new Error(`Los datos para el agente son demasiado grandes (${Math.round(text.length / 1000)}k caracteres: ${sizes}); no se mandó nada a Claude.`);
+  }
+  return text;
 }
 
 export function createAgentRunner({ anthropic, meta, reports, repo, execute, identity, model = DEFAULT_MODEL, log = console }) {
