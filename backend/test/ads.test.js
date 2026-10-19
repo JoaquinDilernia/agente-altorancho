@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createTestDb } from './helpers/testDb.js';
-import { buildAdsApp, fakeMeta, fakeAnthropic, toolTurn, waitRun, contextSection, PNG_1x1, MP4 } from './helpers/adsFakes.js';
+import { buildAdsApp, fakeMeta, fakeReports, fakeAnthropic, toolTurn, waitRun, contextSection, PNG_1x1, MP4 } from './helpers/adsFakes.js';
 import { buildLinkCreativeSpec, buildAdName, buildIgPostCreativeSpec } from '../src/ads/creativeSpec.js';
 import { summarizeMetaRow, realMetrics } from '../src/ads/metrics.js';
 import { createIdentity, trimForAgent } from '../src/ads/agent.js';
@@ -290,6 +290,24 @@ describe('pauta con Meta limitado', () => {
     expect(first.body.metaError).toMatch(/80004/);
     expect((await call('get', '/api/ads/overview')).body.metaError).toMatch(/80004/);
     expect(calls).toBe(1);
+    await db.close();
+  });
+});
+
+describe('foto de la cuenta', () => {
+  it('trae lo que entrega y, por id, lo pausado que vendió hace poco', async () => {
+    const db = await createTestDb();
+    const meta = fakeMeta();
+    const reports = fakeReports();
+    const ranking = reports.adsRanking;
+    reports.adsRanking = async (args) => {
+      const r = await ranking(args);
+      return args.level === 'ad' ? { ...r, rows: [...r.rows, { id: '950', spend: 0, sales: 1, revenue: 30000, roas: null, costPerSale: null, metaPurchases: 0 }] } : r;
+    };
+    const { call } = buildAdsApp({ db, meta, reports });
+    const snap = (await call('get', '/api/ads/overview')).body.snapshot;
+    expect(snap.ads.map((a) => a.id)).toEqual(['902', '950']);
+    expect(meta.calls.filter(([n]) => n === 'getByIds')).toEqual([['getByIds', 'ad', ['950']]]);
     await db.close();
   });
 });

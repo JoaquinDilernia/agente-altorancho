@@ -33,6 +33,10 @@ export function fakeMeta() {
     videoThumbnail: async () => 'https://t/thumb.jpg',
     createCreative: async (spec) => { log('createCreative', spec); return { id: '904' }; },
     createAd: async (a) => { log('createAd', a); return { id: '905' }; },
+    getByIds: async (level, ids) => {
+      log('getByIds', level, ids);
+      return ids.map((id) => ({ id, name: `PAUSADO ${id}`, adset_id: '901', campaign_id: '900', status: 'PAUSED', effective_status: 'PAUSED' }));
+    },
     searchInterests: async () => [{ id: '6003', name: 'Decoración de interiores' }],
     discoverIdentity: async () => ({ pageId: '111', igUserId: '222' }),
     getIgMedia: async () => [

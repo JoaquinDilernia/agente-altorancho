@@ -19,10 +19,10 @@ export async function buildSnapshot({ meta, reports, now = new Date() }) {
   const w7 = { from: addDays(today, -6), to: today };
   const prev = { from: addDays(today, -13), to: addDays(today, -7) };
   const monthFrom = `${today.slice(0, 7)}-01`;
-  const [campaigns, adsets, ads, todayRows, monthRows, adWeek, store7, storeMonth, ...ranks] = await Promise.all([
-    meta.getCampaigns(),
-    meta.getAdsets(),
-    meta.getAds(),
+  const [runningCampaigns, runningAdsets, runningAds, todayRows, monthRows, adWeek, store7, storeMonth, ...ranks] = await Promise.all([
+    meta.getCampaigns({ running: true }),
+    meta.getAdsets({ running: true }),
+    meta.getAds({ running: true }),
     meta.getInsights('account', today, today),
     meta.getInsights('account', monthFrom, today),
     meta.getInsights('ad', w7.from, today),
@@ -30,6 +30,34 @@ export async function buildSnapshot({ meta, reports, now = new Date() }) {
     reports.summary({ from: monthFrom, to: today }),
     ...LEVELS.flatMap((level) => [reports.adsRanking({ ...w7, level }), reports.adsRanking({ ...prev, level })]),
   ]);
+  // Lo pausado que gastó o vendió en las últimas dos semanas se pide aparte, por id
+  const recent = { campaign: new Set(), adset: new Set(), ad: new Set() };
+  for (const r of adWeek) {
+    if (!Number(r.spend)) continue;
+    recent.campaign.add(r.campaign_id);
+    recent.adset.add(r.adset_id);
+    recent.ad.add(r.ad_id);
+  }
+  for (const [i, level] of LEVELS.entries()) {
+    for (const rows of [ranks[i * 2].rows, ranks[i * 2 + 1].rows]) {
+      for (const r of rows) if (r.spend || r.sales) recent[level].add(r.id);
+    }
+  }
+  const missing = (level, have) => {
+    const ids = new Set(have.map((o) => o.id));
+    return [...recent[level]].filter((id) => id && !ids.has(id));
+  };
+  const extra = async (level, have) => {
+    const ids = missing(level, have);
+    return ids.length ? meta.getByIds(level, ids) : [];
+  };
+  const [moreCampaigns, moreAdsets, moreAds] = await Promise.all([
+    extra('campaign', runningCampaigns), extra('adset', runningAdsets), extra('ad', runningAds),
+  ]);
+  const campaigns = [...runningCampaigns, ...moreCampaigns];
+  const adsets = [...runningAdsets, ...moreAdsets];
+  const ads = [...runningAds, ...moreAds];
+
   const real = {};
   LEVELS.forEach((level, i) => {
     real[level] = { w7: new Map(ranks[i * 2].rows.map((r) => [r.id, r])), prev: new Map(ranks[i * 2 + 1].rows.map((r) => [r.id, r])) };

@@ -83,6 +83,13 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
     insights: 'campaign_id,adset_id,ad_id,spend,impressions,reach,frequency,clicks,ctr,cpm,actions,action_values',
   };
 
+  const RUNNING = {
+    campaign: ['ACTIVE', 'IN_PROCESS', 'WITH_ISSUES'],
+    adset: ['ACTIVE', 'IN_PROCESS', 'WITH_ISSUES'],
+    ad: ['ACTIVE', 'IN_PROCESS', 'WITH_ISSUES', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO'],
+  };
+  const runningFilter = (level) => ({ filtering: [{ field: 'effective_status', operator: 'IN', value: RUNNING[level] }] });
+
   const insightParams = (since, until) => ({ level: 'ad', time_increment: '1', time_range: { since, until }, fields: INSIGHT_FIELDS });
 
   return {
@@ -112,9 +119,20 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
     createCreative: (spec) => req(`${accountId}/adcreatives`, { method: 'POST', body: spec }),
     updateAdCreative: (adId, creativeId) => req(adId, { method: 'POST', body: { creative: { creative_id: creativeId } } }),
 
-    getCampaigns: () => getAll(`${accountId}/campaigns`, { fields: LIVE.campaign, limit: '200' }),
-    getAdsets: () => getAll(`${accountId}/adsets`, { fields: LIVE.adset, limit: '200' }),
-    getAds: () => getAll(`${accountId}/ads`, { fields: LIVE.ad, limit: '200' }),
+    // running: solo lo que está entregando o por entregar (la cuenta tiene años de pausados: traerlos todos
+    // eran decenas de páginas y agotaba el límite de llamadas)
+    getCampaigns: ({ running } = {}) => getAll(`${accountId}/campaigns`, { fields: LIVE.campaign, limit: '200', ...(running ? runningFilter('campaign') : {}) }),
+    getAdsets: ({ running } = {}) => getAll(`${accountId}/adsets`, { fields: LIVE.adset, limit: '200', ...(running ? runningFilter('adset') : {}) }),
+    getAds: ({ running } = {}) => getAll(`${accountId}/ads`, { fields: LIVE.ad, limit: '200', ...(running ? runningFilter('ad') : {}) }),
+    // Objetos puntuales (los pausados con movimiento reciente), de a 50 ids por llamada
+    async getByIds(level, ids) {
+      const out = [];
+      for (let i = 0; i < ids.length; i += 50) {
+        const json = await req('', { params: { ids: ids.slice(i, i + 50).join(','), fields: LIVE[level] } });
+        out.push(...Object.values(json));
+      }
+      return out;
+    },
     // since/until en YYYY-MM-DD (hora de la cuenta)
     getInsights: (level, since, until) => getAll(`${accountId}/insights`, { level, fields: LIVE.insights, time_range: { since, until }, limit: '500' }),
     createAdset: (payload) => req(`${accountId}/adsets`, { method: 'POST', body: payload }),

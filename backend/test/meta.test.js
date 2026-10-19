@@ -25,6 +25,21 @@ describe('cliente meta', () => {
     const filters = fetchFn.mock.calls.map((c) => new URL(c[0]).searchParams.get('filtering')).filter(Boolean);
     expect(JSON.parse(filters[0])).toEqual([{ field: 'effective_status', operator: 'IN', value: ['ARCHIVED'] }]);
   });
+  it('la foto del agente pide solo lo que está entregando, y lo demás por id de a 50', async () => {
+    const fetchFn = vi.fn(async (url) => {
+      const ids = new URL(url).searchParams.get('ids');
+      return ok(ids ? Object.fromEntries(ids.split(',').map((id) => [id, { id }])) : { data: [] });
+    });
+    const meta = make(fetchFn);
+    await meta.getAds({ running: true });
+    const filtering = JSON.parse(new URL(fetchFn.mock.calls[0][0]).searchParams.get('filtering'));
+    expect(filtering[0].value).toContain('ACTIVE');
+    expect(filtering[0].value).not.toContain('PAUSED');
+    const ids = Array.from({ length: 60 }, (_, i) => String(i));
+    expect((await meta.getByIds('ad', ids)).map((o) => o.id)).toEqual(ids);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+    expect(new URL(fetchFn.mock.calls[1][0]).pathname).toBe('/v23.0/');
+  });
   it('listAds pide páginas chicas (con el creativo Meta responde "reduce the amount of data" a 500)', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok({ data: [] }));
     await make(fetchFn).listAds();
