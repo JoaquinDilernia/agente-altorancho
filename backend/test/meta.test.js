@@ -40,6 +40,16 @@ describe('cliente meta', () => {
     expect(fetchFn).toHaveBeenCalledTimes(3);
     expect(new URL(fetchFn.mock.calls[1][0]).pathname).toBe('/v23.0/');
   });
+  it('getByIds saltea ids que Meta no reconoce (un id malo rechaza el lote entero) y los que no son números', async () => {
+    const fetchFn = vi.fn(async (url) => {
+      const ids = new URL(url).searchParams.get('ids').split(',');
+      if (ids.includes('666')) return ok({ error: { code: 100, message: 'Unsupported get request.', error_subcode: 33 } });
+      return ok(Object.fromEntries(ids.map((id) => [id, { id }])));
+    });
+    const r = await make(fetchFn).getByIds('ad', ['1', '666', '2', '{{ad.id}}', '3']);
+    expect(r.map((o) => o.id)).toEqual(['1', '2', '3']);
+    for (const [url] of fetchFn.mock.calls) expect(new URL(url).searchParams.get('ids')).not.toContain('{{');
+  });
   it('listAds pide páginas chicas (con el creativo Meta responde "reduce the amount of data" a 500)', async () => {
     const fetchFn = vi.fn().mockResolvedValue(ok({ data: [] }));
     await make(fetchFn).listAds();

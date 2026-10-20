@@ -125,12 +125,22 @@ export function createMetaClient({ accessToken, accountId, fetchFn = fetch, slee
     getAdsets: ({ running } = {}) => getAll(`${accountId}/adsets`, { fields: LIVE.adset, limit: '200', ...(running ? runningFilter('adset') : {}) }),
     getAds: ({ running } = {}) => getAll(`${accountId}/ads`, { fields: LIVE.ad, limit: '200', ...(running ? runningFilter('ad') : {}) }),
     // Objetos puntuales (los pausados con movimiento reciente), de a 50 ids por llamada
+    // Los ids salen también de los UTMs de las ventas (anuncios borrados, de otra cuenta o mal cargados) y
+    // un solo id que Meta no reconoce rechaza el lote entero (código 100): se parte en mitades y se saltea
     async getByIds(level, ids) {
+      const fetchBatch = async (batch) => {
+        try {
+          return Object.values(await req('', { params: { ids: batch.join(','), fields: LIVE[level] } }));
+        } catch (err) {
+          if (err.code !== 100) throw err;
+          if (batch.length === 1) return [];
+          const half = Math.ceil(batch.length / 2);
+          return [...await fetchBatch(batch.slice(0, half)), ...await fetchBatch(batch.slice(half))];
+        }
+      };
+      const valid = ids.filter((id) => /^\d+$/.test(id));
       const out = [];
-      for (let i = 0; i < ids.length; i += 50) {
-        const json = await req('', { params: { ids: ids.slice(i, i + 50).join(','), fields: LIVE[level] } });
-        out.push(...Object.values(json));
-      }
+      for (let i = 0; i < valid.length; i += 50) out.push(...await fetchBatch(valid.slice(i, i + 50)));
       return out;
     },
     // since/until en YYYY-MM-DD (hora de la cuenta)
